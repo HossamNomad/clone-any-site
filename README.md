@@ -36,12 +36,23 @@ Next.js landing page:
 
 ## Install
 
-### Option A — copy the folders (works everywhere)
+### Option A — as a Claude Code plugin (one-liner, recommended)
+
+In Claude Code, run:
+
+```
+/plugin marketplace add HossamNomad/clone-any-site
+/plugin install clone-any-site@hossam-skills
+```
+
+That's it — `/clone` is now available. (Run `/plugin` anytime for the interactive browser.)
+
+### Option B — copy the folders (works everywhere, no plugin system)
 
 Clone this repo, then copy the two folders into your Claude Code config:
 
 ```bash
-git clone https://github.com/<owner>/clone-any-site.git
+git clone https://github.com/HossamNomad/clone-any-site.git
 
 # Per-project:
 cp -r clone-any-site/skills/clone-any-site   <your-project>/.claude/skills/
@@ -55,10 +66,10 @@ cp    clone-any-site/commands/clone.md        ~/.claude/commands/
 Restart Claude Code. Type `/clone <url>` — or just paste a URL and say *"clone this site"* (the skill
 auto-triggers).
 
-### Option B — download the zip
+### Option C — download the zip
 
 Grab the latest archive from [**Releases**](../../releases), unzip, and copy the `skills/` and `commands/`
-folders as in Option A.
+folders as in Option B.
 
 > Full handoff details are in [`skills/clone-any-site/INSTALL.md`](skills/clone-any-site/INSTALL.md).
 

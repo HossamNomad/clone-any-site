@@ -1,0 +1,12 @@
+{
+  "name": "hossam-skills",
+  "owner": { "name": "Hossam Salmi", "url": "https://github.com/HossamNomad" },
+  "plugins": [
+    {
+      "name": "clone-any-site",
+      "source": "./",
+      "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own.",
+      "version": "1.0.0"
+    }
+  ]
+}

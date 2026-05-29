@@ -1,0 +1,10 @@
+{
+  "name": "clone-any-site",
+  "version": "1.0.0",
+  "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own. Handles WebGL/3D scroll sites, not just static pages.",
+  "author": { "name": "Hossam Salmi", "url": "https://github.com/HossamNomad" },
+  "homepage": "https://github.com/HossamNomad/clone-any-site",
+  "repository": "https://github.com/HossamNomad/clone-any-site",
+  "license": "MIT",
+  "keywords": ["clone", "website", "mirror", "webgl", "fidelity", "playwright", "repurpose"]
+}
