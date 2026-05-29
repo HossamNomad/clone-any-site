@@ -1,0 +1,19 @@
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Runtime artifacts the skill PRODUCES (must never be committed — see the IP rule in README)
+mirror/
+**/mirror/
+_vendor/
+_recon/fidelity/
+.fidelity/
+fidelity-report.md
+*.crawl-log.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

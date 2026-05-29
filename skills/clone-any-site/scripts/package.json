@@ -1,0 +1,18 @@
+{
+  "name": "clone-any-site-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Bundled tooling for the clone-any-site skill: crawler (zero-dep), loopback server (zero-dep), and the Playwright fidelity gate.",
+  "scripts": {
+    "crawl": "node crawl.mjs",
+    "serve": "node serve.mjs",
+    "fidelity": "node run-fidelity.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0",
+    "ssim.js": "^3.5.0"
+  },
+  "comment": "crawl.mjs and serve.mjs need only Node 18+ (built-in fetch). Only run-fidelity.mjs needs the devDependencies above + `npx playwright install chromium`."
+}
