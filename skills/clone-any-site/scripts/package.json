@@ -6,7 +6,15 @@
   "scripts": {
     "crawl": "node crawl.mjs",
     "serve": "node serve.mjs",
-    "fidelity": "node run-fidelity.mjs"
+    "fidelity": "node run-fidelity.mjs",
+    "extract": "node extract-manifest.mjs",
+    "validate": "node validate-manifest.mjs",
+    "swap": "node apply-swaps.mjs",
+    "fit": "node fit-slot.mjs",
+    "gate": "node publish-gate.mjs",
+    "distill": "node distill-techniques.mjs",
+    "deps": "node clone-deps-check.mjs",
+    "test": "node --test test/"
   },
   "devDependencies": {
     "playwright": "^1.48.0",
@@ -14,5 +22,8 @@
     "pngjs": "^7.0.0",
     "ssim.js": "^3.5.0"
   },
-  "comment": "crawl.mjs and serve.mjs need only Node 18+ (built-in fetch). Only run-fidelity.mjs needs the devDependencies above + `npx playwright install chromium`."
+  "optionalDependencies": {
+    "sharp": "^0.33.0"
+  },
+  "comment": "crawl.mjs + serve.mjs need only Node 18+ (built-in fetch). run-fidelity.mjs + extract-manifest.mjs + publish-gate.mjs need the devDependencies above + `npx playwright install chromium`. fit-slot.mjs uses optional sharp (images) + the ffmpeg binary on PATH (video); run `node clone-deps-check.mjs` to verify — both degrade gracefully if absent."
 }

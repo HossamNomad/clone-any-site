@@ -120,3 +120,20 @@ source), any public deploy, spending money (font licenses), and anything irrever
 
 See `launch-prompt.md` in this folder — paste it into the agent's PLAN mode with `<TARGET_URL>` replaced, to
 generate the full wave-based cahier des charges before any code is written.
+
+---
+
+## 6. Repurpose Layer — make the mirror malleable (after the gate passes)
+
+The mirror + gate prove a pixel-perfect copy. The **Repurpose Layer** turns it into *your* site by keep-or-
+swapping **numbered** elements — visually, on mobile + PC. `/clone` stops at a malleable mirror; repurposing is
+on demand and keeps 100% of the structure/animations. The method, manifest, editor, IP gate, and technique
+ledger are documented in:
+
+- **`repurpose-layer.md`** — the end-to-end pipeline (extract-manifest → edit-map/modifier → swap → preview →
+  publish-gate → DOM-derivative / clean-room build → design-symphony → multi-viewport gate → deploy) + the
+  legitimacy model.
+- **`manifest-schema.md`** + **`../scripts/manifest.schema.json`** — the numbered-manifest contract.
+- **`editor-guide.md`** — the interactive editor (double-click to edit, drag-drop import, manual mode), opened
+  in VS Code's Simple Browser or any browser over the loopback mirror.
+- **`clone-interfaces.md`** — the engineering contract (CLI signatures, `/__clone/*` endpoints, fit-slot/gate I/O).

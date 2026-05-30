@@ -11,13 +11,26 @@ clone-any-site/                 # the skill
 ├── INSTALL.md                  # this file
 ├── references/
 │   ├── playbook.md             # the full method (fidelity rationale + traps)
+│   ├── repurpose-layer.md      # the Repurpose Layer method (manifest → editor → gate → build)
+│   ├── manifest-schema.md      # the numbered-manifest contract (human doc)
+│   ├── editor-guide.md         # the interactive editor (double-click, drag-drop, manual mode)
+│   ├── clone-interfaces.md     # engineering contract (CLI sigs + /__clone endpoints)
 │   └── launch-prompt.md        # paste-into-plan-mode cahier-des-charges generator
 └── scripts/
     ├── crawl.mjs               # zero-dep site crawler (the mirror)
-    ├── serve.mjs               # zero-dep loopback server
-    ├── run-fidelity.mjs        # Playwright fidelity gate (PASS/FAIL + report)
+    ├── serve.mjs               # zero-dep loopback server (+ --edit editor mode + /__clone/*)
+    ├── run-fidelity.mjs        # Playwright fidelity gate (floor-derived, multi-viewport)
     ├── sw.template.js          # offline-shim template (form stub etc.)
-    └── package.json            # deps for the fidelity gate only
+    ├── extract-manifest.mjs    # numbered manifest from the hydrated mirror (Playwright)
+    ├── manifest.schema.json    # the manifest data contract
+    ├── validate-manifest.mjs   # dry-run validator (zero-dep)
+    ├── apply-swaps.mjs         # two-target writer (preview + publishable build)
+    ├── fit-slot.mjs            # dropped file → responsive set (sharp/ffmpeg, degrades)
+    ├── publish-gate.mjs        # blocking IP gate (attestation + scans + pHash)
+    ├── distill-techniques.mjs  # cumulative technique ledger → design-system/clone-techniques/
+    ├── clone-deps-check.mjs    # runtime dependency probe
+    ├── editor/                 # zero-dep edit-map + interactive editor overlay (served)
+    └── package.json            # deps (gate + extract + sharp optional)
 clone.md                        # the /clone slash command (ships separately, see below)
 ```
 
@@ -64,6 +77,11 @@ your brand / hero object / copy / fonts** → build a clean engine from scratch 
   npm install
   npx playwright install chromium
   ```
+- The **Repurpose Layer** (extract-manifest, publish-gate, the editor's image pipeline) uses the same
+  Playwright above, plus optional **sharp** (`npm i sharp`) for responsive images and the **ffmpeg** binary on
+  PATH for video. Both degrade gracefully. Verify everything with `node scripts/clone-deps-check.mjs`. The
+  crawler, server (incl. editor mode), validator, swap-preview, technique ledger, and editor overlay stay
+  **zero-dependency**.
 - **Optional but recommended** for best recon: the **chrome-devtools** MCP server and **Firecrawl**
   (MCP or CLI). The skill works without them but reads the live site less precisely.
 

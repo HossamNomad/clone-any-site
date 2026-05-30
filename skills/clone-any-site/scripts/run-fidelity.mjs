@@ -2,36 +2,37 @@
 // Self-contained Playwright harness. Generalized (target via env). Run:
 //   CLONE_REF="https://www.example.com/" node run-fidelity.mjs
 //   CLONE_REF="https://www.example.com/" CLONE_MIRROR="http://127.0.0.1:4321/" CLONE_N=12 node run-fidelity.mjs
+//   # multi-viewport (mobile 390@DPR3 + desktop 1440@DPR2 in one PASS) + touch-survival on mobile:
+//   CLONE_REF="https://host/" CLONE_VIEWPORTS="390x3,1440x2" node run-fidelity.mjs
 //
 // Determinism handled: scroll-assert (retry on drift), WebGL new-frame wait (NOT a blind timeout),
 // deterministic <video> seek, runtime maxScroll, pinned viewport/DPR/color/reduced-motion.
 // Gate is floor-derived — there is no hardcoded magic 0.95 on WebGL noise.
 //
-// Deps (install in this folder or the project): playwright pixelmatch pngjs ssim.js
-//   npm i -D playwright pixelmatch pngjs ssim.js && npx playwright install chromium
+// Deps: playwright pixelmatch pngjs ssim.js  (npm i -D … && npx playwright install chromium)
 
 import { chromium } from 'playwright';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import ssim from 'ssim.js';
+import * as ssimNs from 'ssim.js';
 import { mkdir, writeFile } from 'node:fs/promises';
+// ssim.js ships the fn as default in some builds, named `ssim` in others — bind robustly.
+const ssim = typeof ssimNs.default === 'function' ? ssimNs.default : ssimNs.ssim;
 import { dirname, join } from 'node:path';
 
-const OUT_IMG = process.env.CLONE_FIDELITY_IMG || './.fidelity';
-const OUT_REPORT = process.env.CLONE_FIDELITY_REPORT || './fidelity-report.md';
+const OUT_IMG_BASE = process.env.CLONE_FIDELITY_IMG || './.fidelity';
+const OUT_REPORT_BASE = process.env.CLONE_FIDELITY_REPORT || './fidelity-report.md';
 
 const CONFIG = {
   reference: process.env.CLONE_REF || process.argv[2],
   mirror: process.env.CLONE_MIRROR || 'http://127.0.0.1:4321/',
   N: Number(process.env.CLONE_N || 12),
   viewport: { width: Number(process.env.CLONE_VW || 1440), height: Number(process.env.CLONE_VH || 879) },
-  deviceScaleFactor: 1,
+  deviceScaleFactor: Number(process.env.CLONE_DPR || 1),
   launchArgs: ['--force-color-profile=srgb', '--disable-lcd-text', '--hide-scrollbars', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
-  decodeSettleMs: Number(process.env.CLONE_DECODE_MS || 3500), // let 3D decode + first lit frame before depth 0
-  frameWaitMs: 4000,    // max wait for a NEW WebGL frame after a scroll
+  decodeSettleMs: Number(process.env.CLONE_DECODE_MS || 3500),
+  frameWaitMs: 4000,
   settleMs: 220,
-  // Per-depth video.currentTime, length must equal N. Default = no video seek.
-  // Fill from recon (capture-preconditions.json) if the site has a scroll-driven <video>.
   videoMap: (() => {
     if (!process.env.CLONE_VIDEO_MAP) return null;
     return process.env.CLONE_VIDEO_MAP.split(',').map((x) => (x.trim() === '' || x.trim() === 'null' ? null : Number(x)));
@@ -39,7 +40,11 @@ const CONFIG = {
 };
 if (!CONFIG.reference) { console.error('Set CLONE_REF="https://host/" (or pass as arg 1).'); process.exit(1); }
 
-// initScript: stamp window.__frameDrawnAt on every WebGL draw -> positive "new frame" signal
+// multi-viewport: "390x3,1440x2" -> [{w:390,dpr:3},{w:1440,dpr:2}]; empty -> single run with CONFIG defaults
+const VIEWPORTS = (process.env.CLONE_VIEWPORTS || '').split(',').map((s) => s.trim()).filter(Boolean)
+  .map((s) => { const [w, d] = s.split('x'); return { w: Number(w), dpr: Number(d || 1) }; });
+const heightFor = (w) => (w < 500 ? 844 : 879);
+
 const FRAME_HOOK = `
 (() => {
   const stamp = () => { try { window.__frameDrawnAt = performance.now(); } catch(e){} };
@@ -63,8 +68,7 @@ async function captureTarget(browser, url, { isMirror, label }) {
   page.setDefaultTimeout(60000);
   await page.addInitScript(FRAME_HOOK);
   await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-  if (isMirror) { await page.reload({ waitUntil: 'load', timeout: 60000 }); } // let SW take control if present
-  // defensive, identical on both: dismiss a simple consent button if present
+  if (isMirror) { await page.reload({ waitUntil: 'load', timeout: 60000 }); }
   await page.evaluate(() => { document.querySelectorAll('button,a').forEach((b) => { if (/^\s*(accept|agree|ok|got it)\s*$/i.test(b.textContent || '')) b.click(); }); }).catch(() => {});
   await page.waitForTimeout(CONFIG.decodeSettleMs);
 
@@ -113,18 +117,36 @@ function classify(s, pct) {
 }
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-async function main() {
+// Mobile touch-interaction survival check (runs on OUR artifact, the mirror — deterministic).
+async function touchSurvival() {
+  const browser = await chromium.launch({ args: CONFIG.launchArgs });
+  try {
+    const ctx = await browser.newContext({ viewport: CONFIG.viewport, deviceScaleFactor: CONFIG.deviceScaleFactor, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await page.goto(CONFIG.mirror, { waitUntil: 'load', timeout: 60000 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    let hamburger = null;
+    try {
+      const t = await page.$('[aria-expanded], [data-nav-toggle], button.hamburger, .menu-toggle, button[aria-label*="menu" i]');
+      if (t) { await t.click({ timeout: 2000 }); hamburger = true; }
+    } catch { hamburger = false; }
+    return { horizontalOverflowPx: overflow, hamburgerToggle: hamburger };
+  } finally { await browser.close(); }
+}
+
+async function runGate(tag) {
+  const OUT_IMG = tag ? join(OUT_IMG_BASE, tag) : OUT_IMG_BASE;
+  const OUT_REPORT = tag ? OUT_REPORT_BASE.replace(/\.md$/, '') + '.' + tag + '.md' : OUT_REPORT_BASE;
   await mkdir(OUT_IMG, { recursive: true });
   await mkdir(dirname(OUT_REPORT), { recursive: true });
   const browser = await chromium.launch({ args: CONFIG.launchArgs });
-  console.log('capturing reference x2 + mirror x2 ...');
+  console.log(`capturing reference x2 + mirror x2 ${tag ? '@' + tag : ''}...`);
   const refA = await captureTarget(browser, CONFIG.reference, { isMirror: false, label: 'refA' });
   const refB = await captureTarget(browser, CONFIG.reference, { isMirror: false, label: 'refB' });
   const mirA = await captureTarget(browser, CONFIG.mirror, { isMirror: true, label: 'mirA' });
   const mirB = await captureTarget(browser, CONFIG.mirror, { isMirror: true, label: 'mirB' });
   await browser.close();
 
-  // self-consistency (noise floor)
   const refSelf = refA.shots.map((s, i) => compareShots(s.buf, refB.shots[i].buf).ssim);
   const mirSelf = mirA.shots.map((s, i) => compareShots(s.buf, mirB.shots[i].buf).ssim);
   const floor = Math.min(mean(refSelf), mean(mirSelf));
@@ -147,9 +169,11 @@ async function main() {
   const PASS = selfOk && perDepthFloorOk && meanSsim >= Math.max(0.95, floor - 0.01)
     && meanPct >= 95 && minSsim >= 0.85 && structuralBreaks.length === 0;
 
+  const touch = CONFIG.viewport.width < 500 ? await touchSurvival() : null;
+
   const f3 = (x) => x.toFixed(4);
   const md = [
-    `# Fidelity Report`,
+    `# Fidelity Report${tag ? ' — ' + tag : ''}`,
     ``,
     `**Verdict: ${PASS ? '✅ PASS' : '❌ FAIL'}**  ·  generated by \`run-fidelity.mjs\``,
     `Reference: ${CONFIG.reference} (live, read-only) · Mirror: ${CONFIG.mirror} · N=${CONFIG.N} depths · viewport ${CONFIG.viewport.width}×${CONFIG.viewport.height} @DPR${CONFIG.deviceScaleFactor}`,
@@ -163,6 +187,7 @@ async function main() {
     `## Cross comparison (reference vs mirror)`,
     `- mean SSIM **${f3(meanSsim)}** · mean %identical **${meanPct.toFixed(2)}%** · min SSIM **${f3(minSsim)}**`,
     `- structural breaks: **${structuralBreaks.length}**`,
+    touch ? `- touch-survival (mobile): horizontal overflow ${touch.horizontalOverflowPx}px · hamburger toggle ${touch.hamburgerToggle === null ? 'n/a' : touch.hamburgerToggle ? '✅' : '❌'}` : ``,
     ``,
     `| depth | scrollY | SSIM | %identical | classification |`,
     `|------:|--------:|-----:|-----------:|----------------|`,
@@ -181,11 +206,25 @@ async function main() {
     ``,
     `> WebGL note: high-SSIM + lower %identical = acceptable AA/HDRI micro-noise (absorbed by the floor).`,
     `> A low-SSIM depth = a structural break (real bug) — never loosened away.`,
-  ].join('\n');
+  ].filter((l) => l !== ``).join('\n');
 
   await writeFile(OUT_REPORT, md);
-  console.log('FIDELITY', PASS ? 'PASS' : 'FAIL', '| floor', f3(floor), '| meanSSIM', f3(meanSsim), '| minSSIM', f3(minSsim), '| %id', meanPct.toFixed(2), '| breaks', structuralBreaks.length);
-  console.log('report ->', OUT_REPORT);
+  console.log('FIDELITY', tag ? '[' + tag + ']' : '', PASS ? 'PASS' : 'FAIL', '| floor', f3(floor), '| meanSSIM', f3(meanSsim), '| minSSIM', f3(minSsim), '| %id', meanPct.toFixed(2), '| breaks', structuralBreaks.length, touch ? '| overflow ' + touch.horizontalOverflowPx + 'px' : '');
+  return { tag, PASS, meanSsim, minSsim, meanPct, floor, breaks: structuralBreaks.length, touch };
+}
+
+async function main() {
+  const runs = VIEWPORTS.length ? VIEWPORTS : [{ w: CONFIG.viewport.width, dpr: CONFIG.deviceScaleFactor }];
+  const results = [];
+  for (const v of runs) {
+    CONFIG.viewport = { width: v.w, height: heightFor(v.w) };
+    CONFIG.deviceScaleFactor = v.dpr;
+    results.push(await runGate(VIEWPORTS.length ? v.w + 'x' + v.dpr : ''));
+  }
+  const PASS = results.every((r) => r.PASS);
+  if (VIEWPORTS.length) {
+    console.log('MULTI-VIEWPORT', PASS ? 'PASS' : 'FAIL', '|', results.map((r) => `${r.tag}:${r.PASS ? 'ok' : 'FAIL'}(ssim ${r.meanSsim.toFixed(3)}${r.touch ? `,ovf ${r.touch.horizontalOverflowPx}px` : ''})`).join(' · '));
+  }
   process.exit(PASS ? 0 : 1);
 }
 main().catch((e) => { console.error('FIDELITY FATAL', e); process.exit(2); });

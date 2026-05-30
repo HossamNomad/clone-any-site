@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/HossamNomad/clone-any-site/manifest.schema.json",
+  "title": "clone-any-site repurpose manifest",
+  "description": "Single source of truth for the Repurpose Layer. One numbered manifest drives two targets: an internal loopback mirror-preview (max fidelity) and a publishable build. Edit once, both stay in sync. Tracked in git; preview/build payloads are not.",
+  "type": "object",
+  "required": ["meta", "slots"],
+  "additionalProperties": true,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["target", "name", "buildFingerprint", "viewports", "structureAuthorization", "schemaVersion"],
+      "additionalProperties": true,
+      "properties": {
+        "target": { "type": "string", "description": "Original URL studied (provenance only; never the deploy target)." },
+        "name": { "type": "string", "description": "Clone name == clones/<name>/." },
+        "schemaVersion": { "type": "string", "const": "1.0" },
+        "generatedBy": { "type": "string", "description": "extract-manifest.mjs version string." },
+        "generatedAtRef": { "type": "string", "description": "Caller-stamped timestamp (scripts never call Date.now themselves for determinism)." },
+        "mirrorRoot": { "type": "string", "description": "Relative path to the served loopback mirror root." },
+        "buildFingerprint": { "type": "string", "description": "<build-id>+<crawl-log-hash>. A stale manifest applied to a fresh mirror is refused." },
+        "crawlLogHash": { "type": "string" },
+        "viewports": { "type": "array", "items": { "type": "integer" }, "default": [390, 768, 1440] },
+        "structureAuthorization": {
+          "type": "string",
+          "enum": ["unset", "authorized", "unauthorized"],
+          "description": "Set per public deploy by the publish-gate attestation. authorized => DOM-derivative target allowed; unauthorized => clean-room rebuild forced."
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "total": { "type": "integer" },
+            "content": { "type": "integer" },
+            "chrome": { "type": "integer" },
+            "blocking": { "type": "integer", "description": "Retained originals (provenance==original, not authorized) — the 'N slots block publish' counter." }
+          }
+        }
+      }
+    },
+    "slots": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/slot" }
+    }
+  },
+  "definitions": {
+    "slot": {
+      "type": "object",
+      "required": ["number", "stableId", "type", "role", "provenance", "mirrorLocator"],
+      "additionalProperties": true,
+      "properties": {
+        "number": { "type": "integer", "minimum": 1, "description": "Stable, section-scoped + content-anchored. The user swaps by this number ('replace #N')." },
+        "stableId": { "type": "string", "description": "sha-derived id of the content anchor, e.g. img-hero-3f9a. Stable across runs of a frozen mirror." },
+        "type": { "type": "string", "enum": ["text", "img", "bg", "svg", "video", "icon", "section"] },
+        "subtype": { "type": "string", "enum": ["", "text-as-image", "icon-font", "canvas-text", "picture", "srcset", "inline-svg", "css-bg"], "default": "" },
+        "role": { "type": "string", "enum": ["content", "chrome"], "description": "chrome (nav/footer/legal/copyright/address/phone) is hidden from the edit-map VIEW but NEVER from the scan; chrome originals count toward 'blocking'." },
+        "mirrorLocator": {
+          "type": "object",
+          "required": ["cssPath", "nth"],
+          "additionalProperties": true,
+          "properties": {
+            "cssPath": { "type": "string" },
+            "nth": { "type": "integer", "default": 0 },
+            "contentHash": { "type": "string" },
+            "bbox": {
+              "type": "object",
+              "description": "Per-viewport bounding box [x,y,w,h]; absent key => not present at that viewport (e.g. hidden on mobile).",
+              "additionalProperties": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+            }
+          }
+        },
+        "sourceAnchor": { "type": ["string", "null"], "description": "Clean-room marker the publishable scaffold reads, e.g. data-slot=\"s003\" / SLOT('s003') / PILLARS[2].d. Lets the SAME manifest feed both DOM-derivative and clean-room targets." },
+        "provenance": { "type": "string", "enum": ["original", "user", "substitute", "ai"] },
+        "authorization": {
+          "type": ["object", "null"],
+          "description": "Per retained original. Set by the publish-gate attestation; null until then.",
+          "additionalProperties": true,
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "authorized", "unauthorized"] },
+            "attestedAtRef": { "type": "string" },
+            "by": { "type": "string" },
+            "note": { "type": "string" }
+          }
+        },
+        "currentValue": { "type": ["string", "null"], "description": "For text: the actual text content. For media: human-readable label." },
+        "currentValueRef": { "type": ["string", "null"], "description": "mirror://… path to the current asset (media) or inline ref (text)." },
+        "replacement": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "properties": {
+            "kind": { "type": "string", "enum": ["text", "asset"] },
+            "value": { "type": "string", "description": "New text (kind==text)." },
+            "assetRef": { "type": "string", "description": "Path under repurpose/assets/ (kind==asset)." },
+            "generated": { "type": "array", "items": { "type": "string" }, "description": "fit-slot outputs (responsive set)." },
+            "srcsetHtml": { "type": "string" },
+            "appliedAtRef": { "type": "string" }
+          }
+        },
+        "keep": { "type": "boolean", "default": false, "description": "Explicit keep — the user reviewed #N and chose to retain the original content. Required to clear a content slot from 'blocking' without a swap." },
+        "repeat": {
+          "type": ["object", "null"],
+          "description": "Folded repeats: a grid of 6 cards collapses to one head slot (count 6) + childSchema, not 6×N atoms.",
+          "additionalProperties": true,
+          "properties": {
+            "group": { "type": "string" },
+            "index": { "type": "integer" },
+            "count": { "type": "integer" }
+          }
+        },
+        "childSchema": { "type": ["array", "null"], "items": { "type": "object" }, "description": "On a folded group head: the per-item child slot shape." },
+        "breakpointScope": {
+          "type": "object",
+          "description": "Per-viewport variant key; merges per-breakpoint variants under the same number (different hero on mobile etc).",
+          "additionalProperties": { "type": "string" }
+        },
+        "slotSpec": {
+          "type": "object",
+          "description": "Per-viewport target asset spec used by fit-slot to turn a dropped file into the exact responsive set.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "w": { "type": "integer" },
+              "h": { "type": "integer" },
+              "fit": { "type": "string", "enum": ["cover", "contain", "fill"], "default": "cover" },
+              "focal": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "default": [0.5, 0.5] },
+              "format": { "type": "string", "enum": ["webp", "avif", "png", "jpeg", "svg", "mp4", "webm"], "default": "webp" },
+              "maxBytes": { "type": "integer", "description": "Per-slot weight budget." }
+            }
+          }
+        },
+        "computed": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "fontFamily": { "type": "string" },
+            "color": { "type": "string" },
+            "fontSize": { "type": "string" },
+            "naturalDims": { "type": "array", "items": { "type": "integer" } }
+          }
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "data-driven:not-mirrored",
+              "text-as-image:review",
+              "cross-origin:not-mirrored",
+              "paid-font",
+              "analytics-id",
+              "verification-id",
+              "form-action",
+              "consent-vendor",
+              "embed:cross-origin"
+            ]
+          }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

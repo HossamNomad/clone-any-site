@@ -12,6 +12,21 @@ _recon/fidelity/
 fidelity-report.md
 *.crawl-log.json
 
+# Repurpose Layer — the numbered manifest is tracked, but its payloads are user content / IP and never shipped
+repurpose/assets/
+repurpose/preview/
+repurpose/build/
+**/repurpose/assets/
+**/repurpose/preview/
+**/repurpose/build/
+
+# Test scratch (the suite writes here; fixtures + .test.mjs ARE tracked)
+**/test/.work/
+
+# Local scratch
+*.tmp
+.gitignore.copy
+
 # OS / editor
 .DS_Store
 Thumbs.db

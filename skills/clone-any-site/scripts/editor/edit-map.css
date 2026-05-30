@@ -1,0 +1,110 @@
+/* clone-any-site — edit-map + editor overlay. Loopback-only. Injected by serve.mjs --edit.
+   All selectors namespaced .cl-* and the host id #cl-overlay to avoid clashing with the mirror's CSS.
+   z-index sits above any realistic site chrome. No external fonts. */
+
+#cl-overlay, #cl-overlay * { box-sizing: border-box; }
+#cl-overlay {
+  position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
+  font: 13px/1.4 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  color: #f4f4f5;
+}
+#cl-overlay button { font: inherit; cursor: pointer; }
+
+/* hard, unremovable watermark */
+#cl-watermark {
+  position: fixed; right: 10px; bottom: 10px; z-index: 2147483600; pointer-events: none;
+  background: repeating-linear-gradient(45deg, rgba(220,38,38,.92) 0 12px, rgba(150,20,20,.92) 12px 24px);
+  color: #fff; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  padding: 6px 12px; border-radius: 6px; font-size: 11px; box-shadow: 0 2px 10px rgba(0,0,0,.4);
+}
+
+/* toolbar */
+#cl-toolbar {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483500;
+  pointer-events: auto; display: flex; align-items: center; gap: 6px;
+  background: rgba(18,18,20,.94); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 6px 8px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.45);
+}
+#cl-toolbar .cl-group { display: flex; gap: 2px; background: rgba(255,255,255,.06); border-radius: 8px; padding: 2px; }
+#cl-toolbar button.cl-tb {
+  background: transparent; color: #d4d4d8; border: 0; border-radius: 6px; padding: 6px 10px; white-space: nowrap;
+}
+#cl-toolbar button.cl-tb:hover { background: rgba(255,255,255,.10); color: #fff; }
+#cl-toolbar button.cl-tb[aria-pressed="true"] { background: #f4f4f5; color: #18181b; font-weight: 600; }
+#cl-counter {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
+  background: rgba(245,158,11,.16); color: #fcd34d; font-weight: 600;
+}
+#cl-counter.cl-clear { background: rgba(34,197,94,.18); color: #86efac; }
+#cl-counter .cl-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+/* badges */
+.cl-badge {
+  position: absolute; pointer-events: auto; z-index: 2147483200;
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  font-size: 11px; font-weight: 700; line-height: 1; color: #18181b;
+  border: 1.5px solid rgba(0,0,0,.35); box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  transform: translate(-2px, -2px); transition: opacity .12s ease;
+  user-select: none; will-change: transform;
+}
+.cl-badge[data-prov="original"] { background: #fbbf24; }                 /* amber: still theirs */
+.cl-badge[data-prov="user"], .cl-badge[data-prov="substitute"] { background: #4ade80; }   /* green: yours */
+.cl-badge[data-prov="ai"] { background: #c084fc; }
+.cl-badge .cl-type { font-weight: 500; opacity: .7; font-size: 9px; text-transform: uppercase; }
+.cl-badge:hover { outline: 2px solid #fff; outline-offset: 1px; }
+.cl-badge.cl-sel { outline: 2px solid #38bdf8; outline-offset: 1px; }
+/* live/manual mode: shrink badges to unobtrusive dots so the real site is usable */
+#cl-overlay.cl-live .cl-badge { width: 12px; min-width: 12px; height: 12px; padding: 0; opacity: .55; }
+#cl-overlay.cl-live .cl-badge .cl-num, #cl-overlay.cl-live .cl-badge .cl-type { display: none; }
+#cl-overlay.cl-live .cl-badge:hover { width: auto; min-width: 20px; height: 20px; padding: 0 5px; opacity: 1; }
+#cl-overlay.cl-live .cl-badge:hover .cl-num { display: inline; }
+
+/* element highlight ring (one shared element, moved around) */
+#cl-ring {
+  position: absolute; pointer-events: none; z-index: 2147483100;
+  border: 2px solid #38bdf8; border-radius: 4px; box-shadow: 0 0 0 9999px rgba(0,0,0,0);
+  transition: opacity .1s ease; opacity: 0;
+}
+
+/* edit popover (image import / text hint) */
+#cl-pop {
+  position: absolute; z-index: 2147483400; pointer-events: auto; width: 280px;
+  background: rgba(24,24,27,.98); border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+  padding: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.55); display: none;
+}
+#cl-pop.cl-open { display: block; }
+#cl-pop h4 { margin: 0 0 8px; font-size: 12px; color: #a1a1aa; font-weight: 600; }
+#cl-drop {
+  border: 2px dashed rgba(255,255,255,.25); border-radius: 10px; padding: 18px 10px; text-align: center;
+  color: #d4d4d8; background: rgba(255,255,255,.03); transition: all .12s ease;
+}
+#cl-drop.cl-hot { border-color: #4ade80; background: rgba(74,222,128,.10); color: #86efac; }
+#cl-pop .cl-actions { display: flex; gap: 6px; margin-top: 10px; }
+#cl-pop button { flex: 1; background: #f4f4f5; color: #18181b; border: 0; border-radius: 8px; padding: 8px; font-weight: 600; }
+#cl-pop button.cl-ghost { background: rgba(255,255,255,.08); color: #e4e4e7; }
+#cl-pop .cl-err { color: #fca5a5; font-size: 11px; margin-top: 8px; display: none; }
+
+/* contentEditable active text slot */
+.cl-editing { outline: 2px solid #38bdf8 !important; outline-offset: 2px; background: rgba(56,189,248,.08); cursor: text; }
+
+/* slot table panel */
+#cl-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 2147483450; pointer-events: auto;
+  background: rgba(15,15,17,.98); border-left: 1px solid rgba(255,255,255,.12);
+  transform: translateX(100%); transition: transform .18s ease; display: flex; flex-direction: column;
+}
+#cl-panel.cl-open { transform: translateX(0); }
+#cl-panel header { padding: 12px; border-bottom: 1px solid rgba(255,255,255,.1); display: flex; justify-content: space-between; align-items: center; }
+#cl-panel header h3 { margin: 0; font-size: 13px; }
+#cl-panel .cl-list { overflow: auto; flex: 1; }
+#cl-panel .cl-row { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.05); }
+#cl-panel .cl-row:hover { background: rgba(255,255,255,.04); }
+#cl-panel .cl-row .cl-n { font-weight: 700; min-width: 26px; }
+#cl-panel .cl-row .cl-meta { flex: 1; min-width: 0; }
+#cl-panel .cl-row .cl-meta small { color: #71717a; }
+#cl-panel .cl-row .cl-val { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d4d4d8; }
+#cl-panel .cl-row .cl-flag { font-size: 9px; padding: 1px 4px; border-radius: 4px; background: rgba(245,158,11,.2); color: #fcd34d; }
+#cl-panel .cl-row .cl-chrome { background: rgba(113,113,122,.25); color: #d4d4d8; }
+#cl-panel .cl-keep { background: rgba(255,255,255,.08); color: #e4e4e7; border: 0; border-radius: 6px; padding: 4px 8px; }

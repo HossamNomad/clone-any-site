@@ -1,0 +1,29 @@
+/* Deterministic fixture styling — fixed sizes so bbox capture is stable across runs. */
+* { margin: 0; box-sizing: border-box; }
+body { font-family: Georgia, serif; color: #161616; background: #faf8f4; }
+.site-nav { display: flex; gap: 16px; padding: 16px 32px; background: #161616; color: #faf8f4; }
+.site-nav a { color: #faf8f4; text-decoration: none; }
+.brand { font-weight: 700; }
+.hero { padding: 64px 32px; text-align: center; }
+.hero-title { font-size: 44px; line-height: 1.1; }
+.hero-sub { font-size: 18px; margin: 16px 0; color: #555; }
+.hero-img { display: block; width: 100%; max-width: 1200px; height: auto; margin: 24px auto; background: #ddd; }
+.cta { display: inline-block; padding: 12px 28px; background: #161616; color: #faf8f4; text-decoration: none; }
+.cards { padding: 64px 32px; max-width: 1200px; margin: 0 auto; }
+.section-title { font-size: 30px; margin-bottom: 24px; }
+.card { display: inline-block; width: 360px; vertical-align: top; margin: 12px; }
+.card-img { width: 100%; height: 220px; background: #ccc; object-fit: cover; }
+.card-title { font-size: 20px; margin: 12px 0 6px; }
+.quote { padding: 48px 32px; text-align: center; }
+.quote-img { max-width: 900px; width: 100%; height: auto; }
+.partner { padding: 32px; text-align: center; }
+.signup { padding: 64px 32px; max-width: 600px; margin: 0 auto; text-align: center; }
+.signup-form { display: flex; gap: 8px; margin-top: 16px; }
+.signup-form input { flex: 1; padding: 12px; }
+.site-footer { padding: 32px; background: #161616; color: #999; text-align: center; }
+.site-footer a { color: #999; margin: 0 8px; }
+@media (max-width: 768px) {
+  .hero-title { font-size: 32px; }
+  .card { display: block; width: 100%; margin: 12px 0; }
+  .partner { display: none; } /* art-direction: hidden on mobile -> bbox absent at 390 */
+}

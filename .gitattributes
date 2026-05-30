@@ -1,0 +1,15 @@
+# Normalize all text to LF in the repo (consistent diffs across OSes; Node runs CRLF or LF fine).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.mp4 binary
+*.webm binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.glb binary
+*.hdr binary

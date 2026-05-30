@@ -1,10 +1,10 @@
 {
   "name": "clone-any-site",
-  "version": "1.0.0",
-  "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own. Handles WebGL/3D scroll sites, not just static pages.",
+  "version": "1.1.0",
+  "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own by keep-or-swapping numbered elements — visually (double-click to edit text/images, drag-drop import) on mobile + desktop, behind a mechanical IP publish-gate. Handles WebGL/3D scroll sites, not just static pages.",
   "author": { "name": "Hossam Salmi", "url": "https://github.com/HossamNomad" },
   "homepage": "https://github.com/HossamNomad/clone-any-site",
   "repository": "https://github.com/HossamNomad/clone-any-site",
   "license": "MIT",
-  "keywords": ["clone", "website", "mirror", "webgl", "fidelity", "playwright", "repurpose"]
+  "keywords": ["clone", "website", "mirror", "webgl", "fidelity", "playwright", "repurpose", "edit-map", "manifest", "white-label", "visual-editor"]
 }

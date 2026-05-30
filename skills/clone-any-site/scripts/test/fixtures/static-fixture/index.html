@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clone Repurpose — Static Test Fixture</title>
+  <meta name="google-site-verification" content="FIXTURE_VERIFY_TOKEN_DO_NOT_SHIP">
+  <link rel="stylesheet" href="/test/fixtures/static-fixture/styles.css">
+  <!-- analytics id (must be detected as analytics-id flag + stripped) -->
+  <script>window.dataLayer=window.dataLayer||[];/* gtag('config','G-FIXTURE12') */ window.__GA_ID='G-FIXTURE12';</script>
+</head>
+<body>
+  <!-- CHROME: nav (hidden from edit-map view, scanned + counted) -->
+  <nav class="site-nav" data-chrome>
+    <a class="brand" href="/">FixtureBrand</a>
+    <a href="/about">About</a><a href="/pricing">Pricing</a>
+  </nav>
+
+  <!-- CONTENT: hero -->
+  <header class="hero" id="hero">
+    <h1 class="hero-title">The deepest calm, the sharpest edge.</h1>
+    <p class="hero-sub">A deterministic fixture hero subtitle for the manifest extractor.</p>
+    <img class="hero-img" src="/test/fixtures/static-fixture/assets/hero.png" width="1200" height="600" alt="hero scene">
+    <a class="cta" href="/apply">Apply now</a>
+  </header>
+
+  <!-- CONTENT: folded repeats — a grid of 3 identical cards -->
+  <section class="cards" id="pillars">
+    <h2 class="section-title">Three pillars</h2>
+    <article class="card"><img class="card-img" src="/test/fixtures/static-fixture/assets/c1.png" width="400" height="300" alt="pillar one"><h3 class="card-title">Pillar One</h3><p class="card-body">First pillar body copy.</p></article>
+    <article class="card"><img class="card-img" src="/test/fixtures/static-fixture/assets/c2.png" width="400" height="300" alt="pillar two"><h3 class="card-title">Pillar Two</h3><p class="card-body">Second pillar body copy.</p></article>
+    <article class="card"><img class="card-img" src="/test/fixtures/static-fixture/assets/c3.png" width="400" height="300" alt="pillar three"><h3 class="card-title">Pillar Three</h3><p class="card-body">Third pillar body copy.</p></article>
+  </section>
+
+  <!-- CONTENT: text-as-image (copyrighted copy baked into an image — must flag text-as-image:review) -->
+  <section class="quote" id="quote">
+    <img class="quote-img" data-text-as-image src="/test/fixtures/static-fixture/assets/quote.png" width="900" height="200" alt="Comfort is a slow poison.">
+  </section>
+
+  <!-- CONTENT: cross-origin asset (off-apex CDN — must flag cross-origin:not-mirrored) -->
+  <section class="partner" id="partner">
+    <img class="partner-logo" src="https://cdn.example-not-mirrored.com/logo.png" width="160" height="48" alt="partner logo">
+  </section>
+
+  <!-- CONTENT: a form (must flag form-action; re-point on repurpose) -->
+  <section class="signup" id="signup">
+    <h2 class="section-title">Join the waitlist</h2>
+    <form action="https://forms.example-backend.com/submit" method="post" class="signup-form">
+      <input type="email" name="email" placeholder="you@email.com">
+      <button type="submit">Notify me</button>
+    </form>
+  </section>
+
+  <!-- CHROME: footer / legal / contact (hidden from view, scanned + counted) -->
+  <footer class="site-footer" data-chrome>
+    <p class="legal">© 2026 FixtureBrand SAS · 1 rue du Test, 75001 Paris · +33 1 23 45 67 89</p>
+    <a href="/privacy">Privacy</a><a href="/terms">Terms</a>
+  </footer>
+</body>
+</html>
