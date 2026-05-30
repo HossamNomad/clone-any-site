@@ -32,12 +32,17 @@
     getManifest: function () { return j('GET', '/__clone/manifest'); },
     getState: function () { return j('GET', '/__clone/state'); },
     slot: function (payload) { return j('POST', '/__clone/slot', payload); },
+    group: function (payload) { return j('POST', '/__clone/group', payload); },
+    batch: function (payload) { return j('POST', '/__clone/batch', payload); },
+    theme: function (payload) { return j('POST', '/__clone/theme', payload); },
     upload: function (payload) { return j('POST', '/__clone/upload', payload); },
   };
 
   // ---------- state ----------
   var manifest = null;
   var entries = new Map();   // number -> { slot, el, badge, visible }
+  var entriesByGroup = new Map(); // groupId -> [entry, ...]  (same-content propagation)
+  var reappliers = [];       // editor.js registers fn(slot, el) to repaint a slot's DOM from its replacement
   var curBp = 'all';         // 'all' | '390' | '768' | '1440'
   var mode = 'map';          // 'map' (badges + inspect) | 'live' (interact, badges dimmed)
   var showAfter = true;      // before/after: true = show replacements
@@ -102,9 +107,11 @@
     setTimeout(function () { var c = document.getElementById('cl-panel-close'); if (c) c.addEventListener('click', function () { p.classList.remove('cl-open'); }); }, 0);
     return p;
   }
+  var panelFilter = null; // optional fn(slot) -> bool, set by panel.js
+  function setPanelFilter(fn) { panelFilter = fn; renderPanel(); }
   function renderPanel() {
     var list = panel._list; list.innerHTML = '';
-    manifest.slots.forEach(function (s) {
+    manifest.slots.filter(function (s) { return panelFilter ? panelFilter(s) : true; }).forEach(function (s) {
       var row = el('div', { class: 'cl-row' });
       var flags = (s.flags || []).map(function (f) { return '<span class="cl-flag">' + f.split(':')[0] + '</span>'; }).join('');
       var prov = s.provenance === 'original' ? '' : '<span class="cl-flag" style="background:rgba(74,222,128,.2);color:#86efac">' + s.provenance + '</span>';
@@ -124,14 +131,22 @@
   }
   function escapeHtml(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+
   // ---------- locate live element for a slot ----------
+  // Precedence: data-cl-id anchor (survives DOM-order churn / React re-render) → cssPath+nth → bbox hit-test.
   function resolveEl(slot) {
     var loc = slot.mirrorLocator || {};
+    var id = slot.clId || loc.clId;
+    if (id) {
+      var anchored = document.querySelector('[data-cl-id="' + cssEsc(id) + '"]');
+      if (anchored) return anchored;
+    }
     try {
       if (loc.cssPath) {
         var nodes = document.querySelectorAll(loc.cssPath);
         var node = nodes[(loc.nth | 0)] || nodes[0];
-        if (node) return node;
+        if (node) { if (id) node.setAttribute('data-cl-id', id); return node; } // self-heal: stamp the anchor
       }
     } catch (e) { /* bad selector — fall through */ }
     // bbox fallback: hit-test the recorded center (desktop bbox)
@@ -144,9 +159,18 @@
     return null;
   }
 
+  // repaint a slot's live DOM from its current replacement (delegates to editor.js reappliers)
+  function reapply(slot, el) {
+    var entry = entries.get(slot.number);
+    var node = el || (entry && entry.el);
+    if (!node) return;
+    reappliers.forEach(function (fn) { try { fn(slot, node); } catch (e) { console.warn('[clone] reapply', e); } });
+  }
+  function reapplyAll() { entries.forEach(function (e) { if (e.slot.replacement) reapply(e.slot, e.el); }); }
+
   // ---------- badges ----------
   function buildBadges() {
-    entries.clear();
+    entries.clear(); entriesByGroup.clear();
     var io = new IntersectionObserver(function (recs) {
       recs.forEach(function (r) {
         var num = +r.target.getAttribute('data-cl-for');
@@ -167,7 +191,9 @@
       root.appendChild(badge);
       var entry = { slot: slot, el: elx, badge: badge, visible: true };
       entries.set(slot.number, entry);
+      if (slot.groupId) { if (!entriesByGroup.has(slot.groupId)) entriesByGroup.set(slot.groupId, []); entriesByGroup.get(slot.groupId).push(entry); }
       elx.setAttribute('data-cl-for', String(slot.number));
+      if (slot.clId || (slot.mirrorLocator && slot.mirrorLocator.clId)) elx.setAttribute('data-cl-id', slot.clId || slot.mirrorLocator.clId);
       io.observe(elx);
       // let editor.js (Wave 3) attach dblclick / drag-drop interactions
       interactors.forEach(function (fn) { try { fn(Object.assign({ api: api, ui: ui, bus: { on: on, emit: emit } }, entry)); } catch (e) { console.warn(e); } });
@@ -241,10 +267,14 @@
   // ---------- public API ----------
   window.__CloneEditor = {
     get manifest() { return manifest; }, get mode() { return mode; }, get breakpoint() { return curBp; }, get showAfter() { return showAfter; },
-    entries: entries, api: api, ui: ui, on: on, emit: emit,
+    get config() { return CFG; },
+    entries: entries, entriesByGroup: entriesByGroup, api: api, ui: ui, on: on, emit: emit,
     resolveEl: resolveEl, refreshManifest: refreshManifest, recomputeCounter: recomputeCounter,
-    selectSlot: selectSlot, scheduleLayout: scheduleLayout,
+    selectSlot: selectSlot, scheduleLayout: scheduleLayout, cssEsc: cssEsc,
+    reapply: reapply, reapplyAll: reapplyAll, renderPanel: function () { renderPanel(); }, setPanelFilter: setPanelFilter,
+    setMode: setMode, setBp: setBp, setBeforeAfter: setBeforeAfter,
     registerInteractor: function (fn) { interactors.push(fn); if (manifest) entries.forEach(function (e) { fn(Object.assign({ api: api, ui: ui, bus: { on: on, emit: emit } }, e)); }); },
+    registerReapplier: function (fn) { reappliers.push(fn); },
     TYPE_SWAPPABLE_MEDIA: TYPE_SWAPPABLE_MEDIA,
   };
 
@@ -260,6 +290,26 @@
       window.addEventListener('scroll', scheduleLayout, { passive: true });
       window.addEventListener('resize', scheduleLayout, { passive: true });
       var ro = new ResizeObserver(scheduleLayout); ro.observe(document.documentElement);
+
+      // Survive React re-renders: when the DOM mutates, re-resolve anchors + re-apply user edits that got
+      // blown away. rAF-batched; a window.__clApplying guard (set by editor.js) prevents echoing our own writes.
+      var moPending = false;
+      var mo = new MutationObserver(function () {
+        if (window.__clApplying || moPending) return;
+        moPending = true;
+        requestAnimationFrame(function () {
+          moPending = false;
+          var relaid = false;
+          entries.forEach(function (e) {
+            var live = resolveEl(e.slot);            // re-resolves + self-heals the anchor
+            if (live && live !== e.el) { e.el = live; relaid = true; }
+            if (e.slot.replacement && e.el) reapply(e.slot, e.el);  // re-paint if React reverted it
+          });
+          if (relaid) scheduleLayout();
+        });
+      });
+      try { mo.observe(document.body, { childList: true, subtree: true, characterData: true }); } catch (e) {}
+
       emit('ready', window.__CloneEditor);
       console.log('[clone] edit-map ready —', entries.size, 'badged slots,', manifest.slots.length, 'total');
     }).catch(function (e) {

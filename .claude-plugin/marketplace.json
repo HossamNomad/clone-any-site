@@ -5,8 +5,8 @@
     {
       "name": "clone-any-site",
       "source": "./",
-      "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own — a numbered manifest + a visual editor (double-click to edit, drag-drop import) + a mechanical IP publish-gate.",
-      "version": "1.1.0"
+      "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own — numbered manifest + a real visual editor (sticky, propagating edits · srcset-safe media swaps · Cmd-K palette · CMS find-replace · 1-click themes) + a /clone-list dashboard + a mechanical IP publish-gate.",
+      "version": "1.2.0"
     }
   ]
 }

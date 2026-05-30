@@ -89,10 +89,18 @@ async function buildDomDerivative(manifest, bdir, dir) {
   try {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-    const swapPayload = manifest.slots.map((s) => ({
+    // Stamp the unified anchor (data-cl-id) onto every slot's element, then apply swaps by anchor — so the
+    // built HTML carries anchors (preview == build) and resolution is robust to DOM-order churn.
+    const stampPayload = manifest.slots.map((s) => ({
+      clId: s.clId || (s.mirrorLocator && s.mirrorLocator.clId),
       cssPath: s.mirrorLocator && s.mirrorLocator.cssPath, nth: (s.mirrorLocator && s.mirrorLocator.nth) || 0,
-      type: s.type, repl: s.replacement || null,
-    })).filter((s) => s.cssPath && s.repl);
+    })).filter((s) => s.clId && s.cssPath);
+    await page.evaluate(stampAnchorsInPage, stampPayload);
+    const swapPayload = manifest.slots.map((s) => ({
+      clId: s.clId || (s.mirrorLocator && s.mirrorLocator.clId),
+      cssPath: s.mirrorLocator && s.mirrorLocator.cssPath, nth: (s.mirrorLocator && s.mirrorLocator.nth) || 0,
+      type: s.type, directOnly: !!s.directOnly, repl: s.replacement || null,
+    })).filter((s) => (s.clId || s.cssPath) && s.repl);
     await page.evaluate(applyInPage, swapPayload);
     // strip analytics / verification
     await page.evaluate(stripAnalytics);
@@ -104,16 +112,40 @@ async function buildDomDerivative(manifest, bdir, dir) {
   }
 }
 
-// runs in the page
+// runs in the page — stamp data-cl-id on each slot's element (anchor first, cssPath+nth fallback)
+function stampAnchorsInPage(items) {
+  for (const it of items) {
+    if (document.querySelector('[data-cl-id="' + (window.CSS && CSS.escape ? CSS.escape(it.clId) : it.clId) + '"]')) continue;
+    let el = null;
+    try { const nodes = document.querySelectorAll(it.cssPath); el = nodes[it.nth] || nodes[0]; } catch (e) {}
+    if (el) el.setAttribute('data-cl-id', it.clId);
+  }
+}
+// runs in the page — resolve by anchor, then cssPath+nth; rebuild srcset instead of stripping; edit direct text only.
 function applyInPage(swaps) {
+  function resolve(s) {
+    if (s.clId) { const a = document.querySelector('[data-cl-id="' + (window.CSS && CSS.escape ? CSS.escape(s.clId) : s.clId) + '"]'); if (a) return a; }
+    try { const nodes = document.querySelectorAll(s.cssPath); return nodes[s.nth] || nodes[0] || null; } catch (e) { return null; }
+  }
+  function setDirectText(el, value) {
+    // replace the element's FIRST direct text node (preserve child elements); else prepend one.
+    for (const n of el.childNodes) { if (n.nodeType === 3 && n.nodeValue.trim()) { n.nodeValue = value; return; } }
+    el.insertBefore(document.createTextNode(value), el.firstChild);
+  }
   for (const s of swaps) {
-    const nodes = document.querySelectorAll(s.cssPath); const el = nodes[s.nth] || nodes[0]; if (!el) continue;
-    if (s.type === 'text' && s.repl.kind === 'text') { el.textContent = s.repl.value; }
-    else if (s.repl.assetRef) {
+    const el = resolve(s); if (!el) continue;
+    if (s.type === 'text' && s.repl.kind === 'text') {
+      if (s.directOnly) setDirectText(el, s.repl.value); else el.textContent = s.repl.value;
+    } else if (s.repl.assetRef) {
       const ref = '/' + String(s.repl.assetRef).replace(/^\//, '');
       if (s.type === 'bg') el.style.backgroundImage = 'url("' + ref + '")';
-      else if (s.type === 'video') { el.setAttribute('src', ref); }
-      else { el.setAttribute('src', ref); el.removeAttribute('srcset'); }
+      else if (s.type === 'video') { el.setAttribute('src', ref); if (s.repl.poster) el.setAttribute('poster', '/' + String(s.repl.poster).replace(/^\//, '')); }
+      else {
+        el.setAttribute('src', ref);
+        // REBUILD srcset from the responsive set fit-slot generated — never blind-strip (that broke mobile).
+        if (s.repl.srcset) el.setAttribute('srcset', s.repl.srcset);
+        else el.removeAttribute('srcset'); // single upload, no responsive set → src is authoritative
+      }
     }
   }
 }

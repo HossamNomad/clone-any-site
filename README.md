@@ -13,6 +13,27 @@ fidelity, then writes a clean engine from scratch for your own content.
 /clone https://www.example.com
 ```
 
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `/clone <url>` | Mirror the site pixel-perfect on loopback, prove fidelity, hand you a numbered edit-map — then **stop**. |
+| `/clone-list` | **Dashboard** of every clone you've made: thumbnails, fidelity badges, Open/Edit/Stop loopback servers, recoverable trash. |
+| `/clone-map <name>` | Numbered edit-map overlay (badges + slot table + "N block publish" counter). |
+| `/clone-modifier <name>` | **Visual editor** — double-click text/images to edit, drag-drop/paste import, Cmd-K palette, CMS panel, 1-click themes. |
+| `/clone-swap "#N <file\|text>"` | Swap a single numbered element. |
+| `/clone-preview <name>` | Watermarked loopback before/after. |
+| `/clone-publish <name>` | IP publish-gate → publishable build (human-pause before deploy). |
+
+## New in v1.2
+
+- **Edits that stick + propagate.** Change a word once → it updates **every** matching instance, and the
+  edit survives a reload and even React re-renders (stable `data-cl-id` anchors + a MutationObserver).
+- **Media swaps keep responsiveness.** Replacing an image rebuilds its `srcset` instead of stripping it; logos, inline SVG, and `<video>`+poster all swap correctly.
+- **Real editing UX.** A **Cmd/Ctrl-K command palette**, a searchable **CMS side panel** with **find-and-replace**, and a mobile FAB — works on phone and desktop.
+- **1-click themes.** Recolor/retype the whole clone via CSS-variable overrides **without touching structure or animations**.
+- **`/clone-list` dashboard.** See, preview, launch, edit, and retire all your clones from one loopback page.
+
 ---
 
 ## What it actually does

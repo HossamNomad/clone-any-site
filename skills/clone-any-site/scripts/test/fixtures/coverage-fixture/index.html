@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clone Repurpose — Coverage Fixture (v1.1)</title>
+  <style>
+    *{margin:0;box-sizing:border-box}
+    body{font-family:system-ui,sans-serif}
+    .hero{min-height:80vh;width:100%;background:linear-gradient(135deg,#0d0f12 0%,#1b1e25 100%);color:#fff;padding:40px}
+    .brand{font-weight:700;font-size:20px}
+    .intro span{color:#c8a24b}
+    .pillars{display:flex;gap:16px;padding:40px}
+    footer{padding:24px;background:#111}
+    footer .brand{color:#fff}
+  </style>
+</head>
+<body>
+  <!-- repeated brand string (header + footer) → must share a groupId -->
+  <header class="hero" id="hero">
+    <a class="brand" href="/">Pulsia Protocol</a>
+    <h1 class="hero-title">The deepest calm, the sharpest edge.</h1>
+    <!-- nested inline text: the <p> owns "Comfort is a slow " (directOnly), the <span> owns "poison." -->
+    <p class="intro">Comfort is a slow <span class="accent">poison.</span></p>
+    <img class="hero-img" src="/test/fixtures/coverage-fixture/assets/hero-1440.png"
+         srcset="/test/fixtures/coverage-fixture/assets/hero-390.png 390w, /test/fixtures/coverage-fixture/assets/hero-1440.png 1440w"
+         sizes="100vw" width="1200" height="600" alt="hero scene">
+    <a class="cta" href="/apply">Apply now</a>
+  </header>
+
+  <section class="pillars" id="pillars">
+    <h2 class="section-title">Three pillars</h2>
+  </section>
+
+  <footer class="site-footer" id="footer">
+    <a class="brand" href="/">Pulsia Protocol</a>
+    <p class="legal">© 2026 Pulsia · 231 rue Saint-Honoré, 75001 Paris</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clone List — dashboard</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#15171c; --panel2:#1b1e25; --line:#2a2e37; --fg:#e8eaed; --muted:#9aa1ab;
+    --accent:#c8a24b; --green:#4ade80; --red:#f87171; --blue:#60a5fa;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+  a{color:inherit}
+  header.top{position:sticky;top:0;z-index:20;background:rgba(11,13,16,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header.top h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+  header.top .count{color:var(--muted);font-size:13px}
+  header.top .spacer{flex:1}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);border-radius:9px;padding:7px 12px;transition:.12s}
+  button:hover{border-color:#3a3f4b;background:#21252e}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--accent);color:#1a1306;border-color:var(--accent);font-weight:600}
+  button.danger{color:var(--red);border-color:#5b2330}
+  button.small{padding:5px 9px;font-size:12.5px;border-radius:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px;padding:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .card.marked{outline:2px solid var(--red);outline-offset:-2px}
+  .thumb{position:relative;aspect-ratio:16/10;background:#0e1014;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .dot{position:absolute;top:10px;right:10px;width:11px;height:11px;border-radius:50%;background:#52555c;box-shadow:0 0 0 3px rgba(0,0,0,.35)}
+  .dot.live{background:var(--green);box-shadow:0 0 0 3px rgba(74,222,128,.25)}
+  .badge{position:absolute;top:9px;left:9px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:#000a;border:1px solid var(--line)}
+  .badge.pass{color:var(--green);border-color:#2c5138}
+  .badge.fail{color:var(--red);border-color:#5b2330}
+  .badge.none{color:var(--muted)}
+  .body{padding:12px 14px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .name{font-size:15.5px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .src{font-size:12.5px;color:var(--muted);word-break:break-all;cursor:pointer}
+  .src:hover{color:var(--blue)}
+  .meta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+  .meta .pill{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:2px 7px}
+  .portline{font-size:12px;color:var(--green)}
+  .actions{display:flex;gap:8px;align-items:center;margin-top:auto;padding-top:8px;flex-wrap:wrap}
+  .actions .spacer{flex:1}
+  label.keepdel{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+  label.keepdel input{accent-color:var(--red)}
+  .tray{position:sticky;bottom:0;z-index:25;background:rgba(20,12,12,.96);border-top:1px solid #5b2330;padding:12px 18px;display:none;align-items:center;gap:14px}
+  .tray.show{display:flex}
+  .drawer{border-top:1px solid var(--line);padding:14px 18px;background:var(--panel)}
+  .drawer h3{margin:0 0 10px;font-size:14px}
+  .trow{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .trow .tname{flex:1;color:var(--muted);word-break:break-all}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:60;background:#111418;border:1px solid var(--line);border-radius:10px;padding:11px 16px;font-size:13.5px;display:none;align-items:center;gap:12px;box-shadow:0 8px 30px #000a}
+  .toast.show{display:flex}
+  .empty{color:var(--muted);padding:60px 20px;text-align:center}
+  .modal-bg{position:fixed;inset:0;background:#000a;z-index:50;display:none;align-items:center;justify-content:center;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:460px;width:100%;padding:20px}
+  .modal h3{margin:0 0 8px}
+  .modal ul{margin:8px 0 16px;padding-left:18px;color:var(--muted);font-size:13.5px;max-height:200px;overflow:auto}
+  .modal .row{display:flex;gap:10px;justify-content:flex-end}
+  @media(max-width:560px){ .grid{grid-template-columns:1fr;padding:12px;gap:12px} header.top{padding:12px} }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Clone List</h1>
+  <span class="count" id="count">scanning…</span>
+  <span class="spacer"></span>
+  <button class="small" id="btn-refresh">Refresh</button>
+  <button class="small" id="btn-trash-toggle">Trash</button>
+  <button class="small danger" id="btn-stopall">Stop all</button>
+</header>
+
+<div id="grid" class="grid"></div>
+<div id="empty" class="empty" style="display:none">No clones found in this root.</div>
+
+<div id="drawer" class="drawer" style="display:none">
+  <h3>🗑 Trash (recoverable)</h3>
+  <div id="trash-list"></div>
+</div>
+
+<div class="tray" id="tray">
+  <strong id="tray-label">0 marked for deletion</strong>
+  <span class="spacer" style="flex:1"></span>
+  <button id="tray-clear" class="small">Clear marks</button>
+  <button id="tray-apply" class="small danger">Move to trash…</button>
+</div>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3>Move to trash?</h3>
+    <p style="color:var(--muted);font-size:13.5px;margin:.2em 0">These clones will be moved to <code>clones/_trash/</code> (recoverable — not deleted):</p>
+    <ul id="modal-list"></ul>
+    <div class="row">
+      <button id="modal-cancel">Cancel</button>
+      <button id="modal-confirm" class="primary">Move to trash</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg"></span><button class="small" id="toast-undo" style="display:none">Undo</button></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const marked = new Set();
+let CLONES = [], STATUS = {};
+
+function fmtBytes(b){ if(!b) return '—'; const u=['B','KB','MB','GB']; let i=0,n=b; while(n>=1024&&i<u.length-1){n/=1024;i++;} return n.toFixed(n<10&&i>0?1:0)+u[i]; }
+function rel(iso){ if(!iso) return ''; const d=(Date.now()-new Date(iso))/1000; if(d<3600)return Math.round(d/60)+'m ago'; if(d<86400)return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; }
+
+async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok){ let t=''; try{t=(await r.json()).error||'';}catch{} throw new Error(r.status+' '+t); } return r.json(); }
+
+function fidBadge(f){
+  if(!f||!f.verdict) return '<span class="badge none">no gate</span>';
+  const cls = f.verdict==='PASS'?'pass':'fail';
+  const ss = f.meanSsim!=null?(' '+f.meanSsim.toFixed(3)):'';
+  return '<span class="badge '+cls+'">'+f.verdict+ss+'</span>';
+}
+
+function card(c){
+  const live = STATUS[c.name];
+  const el = document.createElement('div');
+  el.className = 'card'+(marked.has(c.name)?' marked':'');
+  el.innerHTML =
+    '<div class="thumb">'+
+      '<img src="'+c.thumb+'" alt="" loading="lazy">'+
+      fidBadge(c.fidelity)+
+      '<span class="dot'+(live?' live':'')+'" title="'+(live?'running on '+live.port:'stopped')+'"></span>'+
+    '</div>'+
+    '<div class="body">'+
+      '<div class="name">'+esc(c.name)+(c.editable?' <span class="meta"><span class="pill">edit-map</span></span>':'')+'</div>'+
+      '<div class="src" data-copy="'+esc(c.sourceUrl||'')+'">'+esc(c.sourceUrl||'source unknown')+'</div>'+
+      '<div class="meta">'+
+        '<span class="pill">'+(c.manifest?(c.manifest.elements+' elts · '+c.manifest.swaps+' swaps'):'no edit-map')+'</span>'+
+        '<span class="pill">'+fmtBytes(c.sizeBytes)+(c.sizeCapped?'+':'')+'</span>'+
+        '<span>'+rel(c.modifiedAt)+'</span>'+
+        (c.servable?'':'<span class="pill" style="color:var(--red)">re-crawl</span>')+
+      '</div>'+
+      (live?'<div class="portline">● running · '+esc(live.mode)+' · '+esc(live.url)+'</div>':'')+
+      '<div class="actions">'+
+        '<button class="small primary act-open" '+(c.servable?'':'disabled')+'>Open</button>'+
+        '<button class="small act-edit" '+((c.servable&&c.editable)?'':'disabled')+' title="'+(c.editable?'visual editor':'run /clone-map first')+'">Edit</button>'+
+        '<button class="small act-stop" '+(live?'':'disabled')+'>Stop</button>'+
+        '<span class="spacer"></span>'+
+        '<label class="keepdel"><input type="checkbox" class="mark" '+(marked.has(c.name)?'checked':'')+'> delete</label>'+
+      '</div>'+
+    '</div>';
+
+  el.querySelector('.src').onclick = (e)=>{ const v=e.target.dataset.copy; if(v){navigator.clipboard&&navigator.clipboard.writeText(v); toast('Copied source URL');} };
+  el.querySelector('.act-open').onclick = ()=>startClone(c.name,'open');
+  el.querySelector('.act-edit').onclick = ()=>startClone(c.name,'edit');
+  el.querySelector('.act-stop').onclick = ()=>stopClone(c.name);
+  el.querySelector('.mark').onchange = (e)=>{ if(e.target.checked) marked.add(c.name); else marked.delete(c.name); el.classList.toggle('marked',e.target.checked); renderTray(); };
+  return el;
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function render(){
+  const g = $('#grid'); g.innerHTML='';
+  $('#count').textContent = CLONES.length+' clone'+(CLONES.length!==1?'s':'')+' · '+Object.keys(STATUS).length+' running';
+  $('#empty').style.display = CLONES.length? 'none':'block';
+  for(const c of CLONES) g.appendChild(card(c));
+  renderTray();
+}
+function renderTray(){
+  const n = marked.size;
+  $('#tray').classList.toggle('show', n>0);
+  $('#tray-label').textContent = n+' marked for deletion';
+}
+
+async function load(){
+  try{
+    const [cl, st] = await Promise.all([api('/api/clones'), api('/api/status')]);
+    CLONES = cl.clones||[]; STATUS = st||{}; render();
+  }catch(e){ $('#count').textContent='scan error: '+e.message; }
+}
+async function pollStatus(){
+  try{ STATUS = await api('/api/status'); render(); }catch{}
+}
+
+async function startClone(name, mode){
+  try{ const r = await api('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,mode})});
+    window.open(r.url,'_blank'); await pollStatus(); toast(name+' '+(mode==='edit'?'editor':'mirror')+' on '+r.port);
+  }catch(e){ toast('start failed: '+e.message); }
+}
+async function stopClone(name){ try{ await api('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}); await pollStatus(); toast(name+' stopped'); }catch(e){ toast('stop failed: '+e.message); } }
+
+$('#btn-refresh').onclick = load;
+$('#btn-stopall').onclick = async ()=>{ await api('/api/stop-all',{method:'POST'}); await pollStatus(); toast('all stopped'); };
+$('#tray-clear').onclick = ()=>{ marked.clear(); render(); };
+$('#tray-apply').onclick = ()=>{ const list=$('#modal-list'); list.innerHTML=''; [...marked].forEach(n=>{const li=document.createElement('li');li.textContent=n;list.appendChild(li);}); $('#modal-bg').classList.add('show'); };
+$('#modal-cancel').onclick = ()=>$('#modal-bg').classList.remove('show');
+$('#modal-confirm').onclick = async ()=>{
+  $('#modal-bg').classList.remove('show');
+  const names=[...marked];
+  try{ const r = await api('/api/trash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({names})});
+    marked.clear(); await load(); await refreshTrash();
+    const moved = (r.moved||[]).filter(m=>!m.error);
+    toast(moved.length+' moved to trash', moved.length?()=>undoTrash(moved):null);
+  }catch(e){ toast('trash failed: '+e.message); }
+};
+async function undoTrash(moved){ for(const m of moved){ try{ await api('/api/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trashName:m.trashedTo})}); }catch{} } await load(); await refreshTrash(); toast('restored'); }
+
+$('#btn-trash-toggle').onclick = async ()=>{ const d=$('#drawer'); const show=d.style.display==='none'; d.style.display=show?'block':'none'; if(show) await refreshTrash(); };
+async function refreshTrash(){
+  try{ const r = await api('/api/trash-list'); const box=$('#trash-list'); box.innerHTML='';
+    if(!(r.trash||[]).length){ box.innerHTML='<div style="color:var(--muted);font-size:13px">empty</div>'; return; }
+    for(const t of r.trash){ const row=document.createElement('div'); row.className='trow';
+      row.innerHTML='<span class="tname">'+esc(t.trashName)+'</span><span style="color:var(--muted)">'+fmtBytes(t.sizeBytes)+'</span>';
+      const b=document.createElement('button'); b.className='small'; b.textContent='Restore';
+      b.onclick=async()=>{ try{ await api('/api/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trashName:t.trashName})}); await load(); await refreshTrash(); toast('restored'); }catch(e){ toast('restore failed: '+e.message); } };
+      row.appendChild(b); box.appendChild(row);
+    }
+  }catch(e){ $('#trash-list').innerHTML='<div style="color:var(--red)">'+e.message+'</div>'; }
+}
+
+let toastTimer=null;
+function toast(msg, undoFn){
+  $('#toast-msg').textContent=msg;
+  const u=$('#toast-undo');
+  if(undoFn){ u.style.display=''; u.onclick=()=>{ u.style.display='none'; undoFn(); $('#toast').classList.remove('show'); }; } else u.style.display='none';
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('#toast').classList.remove('show'), undoFn?7000:2600);
+}
+
+load();
+setInterval(pollStatus, 3000);
+</script>
+</body>
+</html>

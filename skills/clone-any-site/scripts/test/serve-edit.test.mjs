@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { chromium } from 'playwright';
@@ -102,4 +102,80 @@ test('serve --edit: write-back refused unless CLONE_LOOPBACK_OK=1 (403)', async 
   assert.equal((await fetch(base + '/__clone/manifest')).status, 200);
   const r = await fetch(base + '/__clone/slot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ number: 1, op: 'keep' }) });
   assert.equal(r.status, 403, 'unarmed write returns 403');
+});
+
+// ---- v1.2 ops: /group (change-all-N) · /batch (find-replace) · /theme ----
+// Reuses this file's existing helpers: startServe(env)->{proc,port}, module-level `repurpose`, raw fetch.
+const groupedManifest = {
+  meta: { target: 'https://x.test', name: 'serve-edit', schemaVersion: '1.1', buildFingerprint: 'b+c', viewports: [390, 1440], structureAuthorization: 'unset', counts: {} },
+  slots: [
+    { number: 1, stableId: 'b1', clId: 'aa01', type: 'text', role: 'content', provenance: 'original', keep: false, replacement: null, groupId: 'g-brand', groupRole: 'primary', mirrorLocator: { clId: 'aa01', cssPath: '.brand', nth: 0 }, currentValue: 'Brand', flags: ['grouped'] },
+    { number: 2, stableId: 'b2', clId: 'aa02', type: 'text', role: 'chrome', provenance: 'original', keep: false, replacement: null, groupId: 'g-brand', groupRole: 'member', mirrorLocator: { clId: 'aa02', cssPath: '.brand', nth: 1 }, currentValue: 'Brand', flags: ['grouped'] },
+    { number: 3, stableId: 't3', clId: 'aa03', type: 'text', role: 'content', provenance: 'original', keep: false, replacement: null, mirrorLocator: { clId: 'aa03', cssPath: '.title', nth: 0 }, currentValue: 'comfort is a slow poison', flags: [] },
+  ],
+};
+async function seedGrouped() {
+  await rmwork();
+  await mkdir(repurpose, { recursive: true });
+  await writeFile(repurpose + 'manifest.json', JSON.stringify(groupedManifest, null, 2));
+}
+const post = (base, path, body) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const readMani = async () => JSON.parse(await readFile(repurpose + 'manifest.json', 'utf8'));
+
+test('POST /__clone/group applies one op to every group member (change-all-N)', async (t) => {
+  await seedGrouped();
+  const { proc: srv, port } = await startServe({ CLONE_LOOPBACK_OK: '1' });
+  const base = `http://127.0.0.1:${port}`;
+  t.after(async () => { srv.kill(); await rmwork(); });
+  const r = await post(base, '/__clone/group', { groupId: 'g-brand', op: 'replace-text', value: 'Pulsia' });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).applied, 2);
+  const m = await readMani();
+  assert.equal(m.slots[0].replacement.value, 'Pulsia');
+  assert.equal(m.slots[1].replacement.value, 'Pulsia');
+  assert.equal(m.slots[2].replacement, null, 'non-member untouched');
+});
+
+test('POST /__clone/batch applies many ops atomically (find-replace)', async (t) => {
+  await seedGrouped();
+  const { proc: srv, port } = await startServe({ CLONE_LOOPBACK_OK: '1' });
+  const base = `http://127.0.0.1:${port}`;
+  t.after(async () => { srv.kill(); await rmwork(); });
+  const r = await post(base, '/__clone/batch', { ops: [{ number: 3, op: 'replace-text', value: 'comfort is a fast poison' }], label: 'fr' });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).applied, 1);
+  assert.match((await readMani()).slots[2].replacement.value, /fast poison/);
+});
+
+test('POST /__clone/theme stores then clears meta.theme', async (t) => {
+  await seedGrouped();
+  const { proc: srv, port } = await startServe({ CLONE_LOOPBACK_OK: '1' });
+  const base = `http://127.0.0.1:${port}`;
+  t.after(async () => { srv.kill(); await rmwork(); });
+  const set = await post(base, '/__clone/theme', { themeId: 'pulsia-noir', tokens: { '--cl-accent': '#c8a24b' }, fonts: { body: 'Inter' } });
+  assert.equal(set.status, 200);
+  assert.equal((await set.json()).theme.id, 'pulsia-noir');
+  assert.equal((await readMani()).meta.theme.id, 'pulsia-noir');
+  const clr = await post(base, '/__clone/theme', { themeId: null });
+  assert.equal((await clr.json()).theme, null);
+});
+
+test('POST /__clone/group is 403 without CLONE_LOOPBACK_OK', async (t) => {
+  await seedGrouped();
+  const { proc: srv, port } = await startServe({ /* unarmed */ });
+  const base = `http://127.0.0.1:${port}`;
+  t.after(async () => { srv.kill(); await rmwork(); });
+  const r = await post(base, '/__clone/group', { groupId: 'g-brand', op: 'replace-text', value: 'x' });
+  assert.equal(r.status, 403);
+});
+
+test('GET /__clone/manifest exposes meta.theme + groupId after set', async (t) => {
+  await seedGrouped();
+  const { proc: srv, port } = await startServe({ CLONE_LOOPBACK_OK: '1' });
+  const base = `http://127.0.0.1:${port}`;
+  t.after(async () => { srv.kill(); await rmwork(); });
+  await post(base, '/__clone/theme', { themeId: 'pulsia-sable', tokens: {}, fonts: {} });
+  const m = await (await fetch(base + '/__clone/manifest')).json();
+  assert.equal(m.meta.theme.id, 'pulsia-sable');
+  assert.equal(m.slots[0].groupId, 'g-brand');
 });

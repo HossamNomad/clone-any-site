@@ -1,0 +1,32 @@
+[
+  {
+    "id": "pulsia-noir",
+    "label": "Pulsia Noir",
+    "tokens": {
+      "--cl-bg": "#0b0d10", "--cl-fg": "#f3efe6", "--cl-accent": "#c8a24b",
+      "--cl-muted": "#8a8f98", "--cl-surface": "#15171c"
+    },
+    "accent": "#c8a24b",
+    "fonts": { "heading": "\"Fraunces\", Georgia, serif", "body": "\"Inter\", system-ui, sans-serif" }
+  },
+  {
+    "id": "pulsia-sable",
+    "label": "Pulsia Sable",
+    "tokens": {
+      "--cl-bg": "#f4efe7", "--cl-fg": "#1c1a17", "--cl-accent": "#9c7a3c",
+      "--cl-muted": "#6b6157", "--cl-surface": "#fbf8f2"
+    },
+    "accent": "#9c7a3c",
+    "fonts": { "heading": "\"Fraunces\", Georgia, serif", "body": "\"Inter\", system-ui, sans-serif" }
+  },
+  {
+    "id": "pulsia-bronze",
+    "label": "Pulsia Bronze",
+    "tokens": {
+      "--cl-bg": "#12100c", "--cl-fg": "#efe7d6", "--cl-accent": "#b8863b",
+      "--cl-muted": "#9b8e74", "--cl-surface": "#1d1813"
+    },
+    "accent": "#b8863b",
+    "fonts": { "heading": "\"Anton\", system-ui, sans-serif", "body": "\"Inter\", system-ui, sans-serif" }
+  }
+]

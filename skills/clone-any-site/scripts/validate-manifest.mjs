@@ -25,7 +25,8 @@ const warn = (m) => warnings.push(m);
 const TYPE = new Set(['text', 'img', 'bg', 'svg', 'video', 'icon', 'section']);
 const ROLE = new Set(['content', 'chrome']);
 const PROV = new Set(['original', 'user', 'substitute', 'ai']);
-const FLAGS = new Set(['data-driven:not-mirrored', 'text-as-image:review', 'cross-origin:not-mirrored', 'paid-font', 'analytics-id', 'verification-id', 'form-action', 'consent-vendor', 'embed:cross-origin']);
+const FLAGS = new Set(['data-driven:not-mirrored', 'text-as-image:review', 'cross-origin:not-mirrored', 'paid-font', 'analytics-id', 'verification-id', 'form-action', 'consent-vendor', 'embed:cross-origin', 'advanced:css-background', 'advanced:pseudo-content', 'grouped', 'volatile-anchor:review']);
+const isAdvanced = (s) => (s.flags || []).some((f) => String(f).startsWith('advanced:'));
 
 async function main() {
   let manifest;
@@ -37,7 +38,7 @@ async function main() {
   if (!meta.target) err('meta.target missing');
   if (!meta.name) err('meta.name missing');
   if (!meta.buildFingerprint) warn('meta.buildFingerprint missing (drift guard disabled)');
-  if (meta.schemaVersion !== '1.0') warn('meta.schemaVersion != "1.0" (got ' + meta.schemaVersion + ')');
+  if (!['1.0', '1.1'].includes(meta.schemaVersion)) warn('meta.schemaVersion not 1.0/1.1 (got ' + meta.schemaVersion + ')');
   const viewports = Array.isArray(meta.viewports) ? meta.viewports.map(String) : [];
   if (!viewports.length) err('meta.viewports missing/empty');
   if (!['unset', 'authorized', 'unauthorized'].includes(meta.structureAuthorization)) err('meta.structureAuthorization invalid: ' + meta.structureAuthorization);
@@ -80,7 +81,7 @@ async function main() {
     // keep + replacement is contradictory
     if (s.keep && s.replacement) warn(tag + ' both keep and replacement set (replacement wins)');
 
-    if (s.provenance === 'original' && !s.keep && !s.replacement) blocking++;
+    if (s.provenance === 'original' && !s.keep && !s.replacement && s.role === 'content' && !isAdvanced(s)) blocking++;
   }
 
   // counts cross-check

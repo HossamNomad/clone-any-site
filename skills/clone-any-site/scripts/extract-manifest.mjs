@@ -223,6 +223,22 @@ function pageExtract(mirrorOrigin) {
 
     // section landmark overview
     if (LANDMARK_TAGS.has(tag)) {
+      // a large gradient ON a landmark (very common: hero <header>/<section>) — landmarks continue below,
+      // so detect it here too or it'd be missed. Flagged advanced (a color value, no third-party asset).
+      const csL = getComputedStyle(el);
+      const bgiL = csL.backgroundImage || '';
+      if (bgiL && bgiL !== 'none' && /gradient/i.test(bgiL) && !/url\(/i.test(bgiL) && !isDisplayNone(el)) {
+        const rL = el.getBoundingClientRect();
+        if (rL.width * rL.height >= innerWidth * innerHeight * 0.15) {
+          pushAtom({
+            kind: 'bg', tag, subtype: 'css-gradient',
+            sectionAnchor: sectionAnchorOf(el), role: classifyRole(el),
+            cssPath: cssPath(el), nth: nthAmong(el, cssPath(el)), bbox: bbox(el),
+            currentValue: 'gradient', advanced: { kind: 'css-background', cssValue: bgiL },
+            contentSig: 'grad|' + cssPath(el), flags: ['advanced:css-background'], repeat: repeatHeadInfo(el),
+          });
+        }
+      }
       pushAtom({
         kind: 'section', tag,
         sectionAnchor: sectionAnchorOf(el),
@@ -253,6 +269,19 @@ function pageExtract(mirrorOrigin) {
       if (textAsImage) { subtype = 'text-as-image'; flags.push('text-as-image:review'); }
       if (isCrossOrigin(src)) flags.push('cross-origin:not-mirrored');
       const r = el.getBoundingClientRect();
+      // Capture the responsive shape so a swap REBUILDS srcset/<picture> instead of stripping it.
+      const sizesAttr = el.getAttribute('sizes') || '';
+      let srcsetSpec = null;
+      if (!isSvg) {
+        if (inPicture && el.parentElement) {
+          const sources = Array.prototype.map.call(el.parentElement.querySelectorAll('source'), (s) => ({
+            type: s.getAttribute('type') || '', media: s.getAttribute('media') || '',
+            srcset: s.getAttribute('srcset') || '', sizes: s.getAttribute('sizes') || '',
+          }));
+          srcsetSpec = { kind: 'picture', sources, sizes: sizesAttr, imgSrcset: srcset };
+        } else if (srcset) srcsetSpec = { kind: 'img-srcset', sizes: sizesAttr, imgSrcset: srcset };
+        else srcsetSpec = { kind: 'plain', sizes: sizesAttr };
+      }
       pushAtom({
         kind: isSvg ? 'svg' : 'img',
         svgImg: isSvg,
@@ -261,7 +290,7 @@ function pageExtract(mirrorOrigin) {
         role: classifyRole(el),
         cssPath: cssPath(el), nth: nthAmong(el, cssPath(el)),
         bbox: isDisplayNone(el) ? null : bbox(el),
-        src, srcset, alt,
+        src, srcset, alt, srcsetSpec,
         naturalDims: [el.naturalWidth || Math.round(r.width) || 0, el.naturalHeight || Math.round(r.height) || 0],
         currentValue: norm(alt) || (src.split('/').pop() || 'image'),
         contentSig: 'img|' + src,
@@ -301,6 +330,8 @@ function pageExtract(mirrorOrigin) {
         cssPath: cssPath(el), nth: nthAmong(el, cssPath(el)),
         bbox: isDisplayNone(el) ? null : bbox(el),
         poster, sources,
+        posterRef: poster || null,
+        sourcesSpec: sources.length ? sources : (el.getAttribute('src') ? [{ src: el.getAttribute('src'), type: '' }] : []),
         naturalDims: [el.videoWidth || Math.round(r.width) || 0, el.videoHeight || Math.round(r.height) || 0],
         currentValue: (sources[0] && sources[0].src.split('/').pop()) || poster.split('/').pop() || 'video',
         contentSig: 'video|' + ((sources[0] && sources[0].src) || poster || cssPath(el)),
@@ -333,14 +364,39 @@ function pageExtract(mirrorOrigin) {
       });
       // bg element may also carry direct text — fall through to the text check below.
     }
+    // gradient/pattern background — flagged ADVANCED (a color value, no third-party asset). Only large
+    // surfaces (>=15% of viewport) so we don't flood with every small button gradient.
+    else if (bgi && bgi !== 'none' && /gradient/i.test(bgi) && !isDisplayNone(el)) {
+      const r = el.getBoundingClientRect();
+      if (r.width * r.height >= innerWidth * innerHeight * 0.15) {
+        pushAtom({
+          kind: 'bg', tag, subtype: 'css-gradient',
+          sectionAnchor: sectionAnchorOf(el),
+          role: classifyRole(el),
+          cssPath: cssPath(el), nth: nthAmong(el, cssPath(el)),
+          bbox: bbox(el),
+          currentValue: 'gradient',
+          advanced: { kind: 'css-background', cssValue: bgi },
+          contentSig: 'grad|' + cssPath(el),
+          flags: ['advanced:css-background'],
+          repeat: repeatHeadInfo(el),
+        });
+        continue;
+      }
+    }
 
     // text leaves
     if (TEXT_TAGS.has(tag)) {
       const dt = directText(el);
       if (dt) {
         const cs2 = getComputedStyle(el);
+        // If this element ALSO has element children (e.g. <p>Hi <span>there</span></p>), it owns only its
+        // DIRECT text nodes ("Hi"). Mark directOnly so an edit replaces those nodes — never textContent,
+        // which would delete the nested <span> (captured as its own slot). Simple text stays unflagged.
+        const directOnly = el.children && el.children.length > 0;
         pushAtom({
-          kind: 'text', tag, subtype: '',
+          kind: 'text', tag, subtype: directOnly ? 'text-leaf' : '',
+          directOnly,
           sectionAnchor: sectionAnchorOf(el),
           role: classifyRole(el),
           cssPath: cssPath(el), nth: nthAmong(el, cssPath(el)),
@@ -450,6 +506,54 @@ function areaBudget(w, h, format) {
 }
 
 // ----------------------------------------------------------------------------------------------------
+// Same-content grouping — slots sharing a logical value (normalized text, or media basename) get a shared
+// groupId so the editor can "change all N at once". Deterministic (id from sorted member clIds).
+// ----------------------------------------------------------------------------------------------------
+const GROUP_STOPWORDS = new Set(['menu', 'home', 'close', 'more', 'next', 'prev', 'previous', 'read more', 'learn more', 'submit', 'search', 'back', 'open', 'login', 'log in', 'sign in', 'sign up', 'contact', 'about', 'yes', 'no', 'ok', 'apply', 'apply now']);
+function groupKeyOf(s) {
+  if (s.type === 'text') {
+    const t = normText(s.currentValue || '').toLowerCase();
+    if (t.length < 3 || GROUP_STOPWORDS.has(t) || /^[\d\s\W]+$/.test(t)) return null;
+    return 'text|' + t;
+  }
+  if (s.type === 'img' || s.type === 'bg' || s.type === 'video' || s.type === 'icon') {
+    const ref = s.currentValueRef || s.currentValue || '';
+    const base = String(ref).split(/[?#]/)[0].split('/').pop();
+    if (!base || base.length < 2) return null;
+    return s.type + '|' + base;
+  }
+  return null;
+}
+function assignGroups(slots) {
+  const groups = new Map();
+  for (const s of slots) { const k = groupKeyOf(s); if (!k) continue; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
+  for (const [, members] of groups) {
+    if (members.length < 2) continue;
+    const gid = 'g-' + shortSha('group|' + members.map((m) => m.clId).sort().join(','), 8);
+    members.forEach((m, i) => { m.groupId = gid; m.groupRole = i === 0 ? 'primary' : 'member'; (m.flags = m.flags || []).push('grouped'); });
+  }
+}
+// A content original is "blocking" until kept or replaced; advanced (gradient/pseudo) slots never block.
+const isBlockingSlot = (s) => s.provenance === 'original' && !s.keep && !s.replacement && s.role === 'content' && !(s.flags || []).some((f) => String(f).startsWith('advanced:'));
+
+// Carry forward user edits from a prior manifest by clId (then stableId). Returns {carried, unmatched}.
+function mergeEdits(slots, prior) {
+  const byCl = new Map(), bySid = new Map();
+  for (const s of (prior.slots || [])) { if (s.clId) byCl.set(s.clId, s); if (s.stableId) bySid.set(s.stableId, s); }
+  let carried = 0, unmatched = 0; const matched = new Set();
+  for (const s of slots) {
+    const old = (s.clId && byCl.get(s.clId)) || (s.stableId && bySid.get(s.stableId));
+    if (old && (old.replacement || old.keep || old.provenance === 'user')) {
+      s.replacement = old.replacement || null; s.keep = !!old.keep;
+      s.provenance = old.provenance || (s.replacement ? 'user' : 'original');
+      carried++; matched.add(old);
+    }
+  }
+  for (const s of (prior.slots || [])) { if ((s.replacement || s.keep || s.provenance === 'user') && !matched.has(s)) unmatched++; }
+  return { carried, unmatched };
+}
+
+// ----------------------------------------------------------------------------------------------------
 // main
 // ----------------------------------------------------------------------------------------------------
 async function main() {
@@ -518,6 +622,9 @@ async function main() {
     number += 1;
     const sa = a.sectionAnchor;
     const stableId = a.kind + '-' + shortSha(sa + '|' + a.kind + '|' + normText(a.currentValue));
+    // clId — document-wide stable anchor (12 hex). Primary locator for runtime + build; stamped as
+    // data-cl-id so edits survive DOM-order churn / React re-render. Content+path+order derived (deterministic).
+    const clId = shortSha('cl|' + sa + '|' + a.kind + '|' + a.contentSig + '|' + a.cssPath + '|' + (a.nth || 0) + '|' + a.docOrder, 12);
     const sourceAnchor = 'data-slot="s' + String(number).padStart(3, '0') + '"';
 
     // type mapping
@@ -556,10 +663,12 @@ async function main() {
     const slot = {
       number,
       stableId,
+      clId,
       type,
       subtype,
       role: a.role,
       mirrorLocator: {
+        clId,
         cssPath: a.cssPath,
         nth: a.nth || 0,
         contentHash,
@@ -608,6 +717,14 @@ async function main() {
     }
 
     if (Object.keys(breakpointScope).length) slot.breakpointScope = breakpointScope;
+
+    // text with element children: edit DIRECT text nodes only (don't nuke nested <span> etc.)
+    if (a.kind === 'text' && a.directOnly) slot.directOnly = true;
+    // media: carry srcset / picture / poster / sources so swaps REBUILD instead of stripping responsiveness
+    if (a.srcsetSpec) slot.srcsetSpec = a.srcsetSpec;
+    if (a.posterRef) slot.posterRef = a.posterRef;
+    if (a.sourcesSpec) slot.sourcesSpec = a.sourcesSpec;
+    if (a.advanced) slot.advanced = a.advanced;
 
     slots.push(slot);
   }
@@ -730,18 +847,33 @@ async function main() {
   }
   const buildFingerprint = buildId + '+' + crawlLogHash;
 
+  // ---- same-content grouping (change-all-N) ----------------------------------------------------------
+  assignGroups(slots);
+
+  // ---- overwrite/merge safety: never silently clobber a manifest that has user edits ----------------
+  const manifestPath = join(outDir, 'manifest.json');
+  let prior = null;
+  try { prior = JSON.parse(await readFile(manifestPath, 'utf8')); } catch {}
+  const priorEdits = prior && Array.isArray(prior.slots) ? prior.slots.filter((s) => s.replacement || s.keep || s.provenance === 'user') : [];
+  if (priorEdits.length && !args.merge && !args.force) {
+    console.error(`extract-manifest: ${manifestPath} has ${priorEdits.length} user edit(s). Re-run with --merge to carry them forward, or --force to overwrite.`);
+    process.exit(2);
+  }
+  if (priorEdits.length && args.merge) { const mr = mergeEdits(slots, prior); console.error(`extract-manifest --merge: carried ${mr.carried} edit(s) forward, ${mr.unmatched} unmatched.`); }
+
   // ---- counts ----------------------------------------------------------------------------------------
   const content = slots.filter((s) => s.role === 'content').length;
   const chrome = slots.filter((s) => s.role === 'chrome').length;
-  const blocking = slots.filter((s) => s.provenance === 'original' && !s.keep && !s.replacement).length;
-  const counts = { total: slots.length, content, chrome, blocking };
+  const grouped = slots.filter((s) => s.groupId).length;
+  const blocking = slots.filter(isBlockingSlot).length;
+  const counts = { total: slots.length, content, chrome, grouped, blocking };
 
   // ---- assemble manifest -----------------------------------------------------------------------------
   const manifest = {
     meta: {
       target: url,
       name,
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       generatedBy: VERSION,
       generatedAtRef: now,
       mirrorRoot: mirrorOrigin,

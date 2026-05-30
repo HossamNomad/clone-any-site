@@ -14,7 +14,7 @@
       "properties": {
         "target": { "type": "string", "description": "Original URL studied (provenance only; never the deploy target)." },
         "name": { "type": "string", "description": "Clone name == clones/<name>/." },
-        "schemaVersion": { "type": "string", "const": "1.0" },
+        "schemaVersion": { "type": "string", "enum": ["1.0", "1.1"] },
         "generatedBy": { "type": "string", "description": "extract-manifest.mjs version string." },
         "generatedAtRef": { "type": "string", "description": "Caller-stamped timestamp (scripts never call Date.now themselves for determinism)." },
         "mirrorRoot": { "type": "string", "description": "Relative path to the served loopback mirror root." },
@@ -33,7 +33,8 @@
             "total": { "type": "integer" },
             "content": { "type": "integer" },
             "chrome": { "type": "integer" },
-            "blocking": { "type": "integer", "description": "Retained originals (provenance==original, not authorized) — the 'N slots block publish' counter." }
+            "grouped": { "type": "integer", "description": "Slots that belong to a same-content group (groupId set)." },
+            "blocking": { "type": "integer", "description": "Content originals not yet kept/replaced (advanced slots excluded) — the 'N slots block publish' counter." }
           }
         }
       }
@@ -51,14 +52,23 @@
       "properties": {
         "number": { "type": "integer", "minimum": 1, "description": "Stable, section-scoped + content-anchored. The user swaps by this number ('replace #N')." },
         "stableId": { "type": "string", "description": "sha-derived id of the content anchor, e.g. img-hero-3f9a. Stable across runs of a frozen mirror." },
+        "clId": { "type": "string", "description": "v1.1 document-wide stable anchor (12 hex). Primary locator: stamped as data-cl-id; survives DOM-order churn / React re-render. Unique per manifest." },
+        "groupId": { "type": "string", "description": "v1.1 same-content group key — slots sharing normalized text or a media basename. Editing the group changes all members ('change all N')." },
+        "groupRole": { "type": "string", "enum": ["primary", "member"], "description": "First-in-document member of a group is 'primary'." },
+        "directOnly": { "type": "boolean", "description": "Text element that also has element children — edit its DIRECT text nodes only, never textContent (which would delete nested slots)." },
         "type": { "type": "string", "enum": ["text", "img", "bg", "svg", "video", "icon", "section"] },
-        "subtype": { "type": "string", "enum": ["", "text-as-image", "icon-font", "canvas-text", "picture", "srcset", "inline-svg", "css-bg"], "default": "" },
+        "subtype": { "type": "string", "enum": ["", "text-as-image", "text-leaf", "icon-font", "canvas-text", "picture", "srcset", "inline-svg", "css-bg", "css-gradient", "pattern-bg", "svg-text", "pseudo-content"], "default": "" },
+        "srcsetSpec": { "type": "object", "additionalProperties": true, "description": "v1.1 responsive shape of an image (picture/img-srcset/plain) so a swap REBUILDS srcset instead of stripping it." },
+        "posterRef": { "type": ["string", "null"], "description": "v1.1 video poster ref." },
+        "sourcesSpec": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "description": "v1.1 video <source> list to rebuild on swap." },
+        "advanced": { "type": "object", "additionalProperties": true, "description": "v1.1 flagged advanced content (e.g. css gradient cssValue) — not a first-class drop target, excluded from blocking." },
         "role": { "type": "string", "enum": ["content", "chrome"], "description": "chrome (nav/footer/legal/copyright/address/phone) is hidden from the edit-map VIEW but NEVER from the scan; chrome originals count toward 'blocking'." },
         "mirrorLocator": {
           "type": "object",
           "required": ["cssPath", "nth"],
           "additionalProperties": true,
           "properties": {
+            "clId": { "type": "string", "description": "v1.1 primary anchor (== slot.clId), resolved as [data-cl-id] before cssPath/nth/bbox fallback." },
             "cssPath": { "type": "string" },
             "nth": { "type": "integer", "default": 0 },
             "contentHash": { "type": "string" },
@@ -93,6 +103,8 @@
             "assetRef": { "type": "string", "description": "Path under repurpose/assets/ (kind==asset)." },
             "generated": { "type": "array", "items": { "type": "string" }, "description": "fit-slot outputs (responsive set)." },
             "srcsetHtml": { "type": "string" },
+            "srcset": { "type": "string", "description": "v1.1 rebuilt srcset string applied to the swapped <img> (so responsiveness is preserved, not stripped)." },
+            "poster": { "type": "string", "description": "v1.1 video poster ref for the swapped <video>." },
             "appliedAtRef": { "type": "string" }
           }
         },
@@ -152,7 +164,11 @@
               "verification-id",
               "form-action",
               "consent-vendor",
-              "embed:cross-origin"
+              "embed:cross-origin",
+              "advanced:css-background",
+              "advanced:pseudo-content",
+              "grouped",
+              "volatile-anchor:review"
             ]
           }
         },

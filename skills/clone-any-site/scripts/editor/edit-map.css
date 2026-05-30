@@ -108,3 +108,45 @@
 #cl-panel .cl-row .cl-flag { font-size: 9px; padding: 1px 4px; border-radius: 4px; background: rgba(245,158,11,.2); color: #fcd34d; }
 #cl-panel .cl-row .cl-chrome { background: rgba(113,113,122,.25); color: #d4d4d8; }
 #cl-panel .cl-keep { background: rgba(255,255,255,.08); color: #e4e4e7; border: 0; border-radius: 6px; padding: 4px 8px; }
+
+/* ===== Repurpose Layer v1.2 — CMS panel · find-replace · themes · command palette · mobile ===== */
+#cl-panel-tools { padding:10px 12px; border-bottom:1px solid var(--cl-line); display:flex; flex-direction:column; gap:8px; }
+#cl-search { width:100%; box-sizing:border-box; background:#0d1117; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:7px; padding:7px 9px; font-size:13px; }
+.cl-chips { display:flex; flex-wrap:wrap; gap:5px; }
+.cl-chip { background:#161b22; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:14px; padding:3px 10px; font-size:11.5px; cursor:pointer; }
+.cl-chip[aria-pressed="true"] { background:var(--cl-accent); border-color:var(--cl-accent); color:#1a1306; }
+.cl-fr { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.cl-fr input { flex:1; min-width:88px; box-sizing:border-box; background:#0d1117; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 8px; font-size:12.5px; }
+.cl-fr button { background:#21262d; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:12.5px; }
+.cl-fr #cl-fr-n { font-size:11.5px; color:var(--cl-good); }
+.cl-themes { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.cl-th-label { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; }
+.cl-th { display:flex; align-items:center; gap:6px; background:#161b22; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:7px; padding:5px 9px; font-size:12px; cursor:pointer; }
+.cl-th::before { content:""; width:11px; height:11px; border-radius:50%; background:var(--sw,#888); display:inline-block; }
+.cl-th-clear::before { display:none; }
+
+/* media popover url row */
+.cl-urlrow { display:flex; gap:6px; margin:8px 0; }
+.cl-urlrow input { flex:1; box-sizing:border-box; background:#0d1117; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 8px; font-size:12.5px; }
+.cl-urlrow button { background:#21262d; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:12.5px; }
+
+/* command palette */
+#cl-pal-bg { position:fixed; inset:0; z-index:2147483640; background:rgba(0,0,0,.45); display:none; align-items:flex-start; justify-content:center; padding-top:12vh; }
+#cl-pal-bg.cl-open { display:flex; }
+#cl-pal { width:min(560px,92vw); background:#0d1117; border:1px solid var(--cl-line); border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.6); overflow:hidden; }
+#cl-pal-in { width:100%; box-sizing:border-box; background:transparent; border:none; border-bottom:1px solid var(--cl-line); color:var(--cl-fg); padding:14px 16px; font-size:15px; outline:none; }
+#cl-pal-list { list-style:none; margin:0; padding:6px; max-height:50vh; overflow:auto; }
+#cl-pal-list li { padding:9px 12px; border-radius:7px; cursor:pointer; font-size:13.5px; color:var(--cl-fg); display:flex; justify-content:space-between; align-items:center; gap:10px; }
+#cl-pal-list li small { color:#8b949e; font-size:11.5px; }
+#cl-pal-list li.cl-sel, #cl-pal-list li:hover { background:var(--cl-accent); color:#1a1306; }
+#cl-pal-list li.cl-sel small { color:#3b2f10; }
+
+/* mobile FAB to open the palette by touch */
+#cl-fab { position:fixed; right:14px; bottom:64px; z-index:2147483630; width:46px; height:46px; border-radius:50%; border:1px solid var(--cl-line); background:var(--cl-accent); color:#1a1306; font-size:20px; cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.4); display:none; }
+
+@media (max-width:768px) {
+  #cl-fab { display:block; }
+  #cl-panel { width:100% !important; max-width:100% !important; }
+  #cl-pal { width:94vw; }
+  .cl-tb { padding:8px 11px; font-size:13px; }
+}

@@ -61,11 +61,15 @@ async function resolveFile(pathname, root) {
 
 const SW_SNIPPET = `<script>if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}</script>`;
 function editorInject(meta) {
-  const cfg = JSON.stringify({ repurposeDir: REPURPOSE_DIR, viewports: (meta && meta.viewports) || [390, 768, 1440], armed: LOOPBACK_OK });
+  const cfg = JSON.stringify({ repurposeDir: REPURPOSE_DIR, viewports: (meta && meta.viewports) || [390, 768, 1440], armed: LOOPBACK_OK, theme: (meta && meta.theme) || null });
+  // defer preserves order: kernel → themes → panel → palette → interactions (each guards on __CloneEditor).
   return `<link rel="stylesheet" href="/__clone/editor/edit-map.css">` +
     `<div id="cl-watermark">LOOPBACK PREVIEW — NOT SHIPPABLE</div>` +
     `<script>window.__CLONE_EDIT=${cfg}</script>` +
     `<script src="/__clone/editor/edit-map.js" defer></script>` +
+    `<script src="/__clone/editor/themes.js" defer></script>` +
+    `<script src="/__clone/editor/panel.js" defer></script>` +
+    `<script src="/__clone/editor/palette.js" defer></script>` +
     `<script src="/__clone/editor/editor.js" defer></script>`;
 }
 
@@ -82,8 +86,23 @@ const sendJson = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'ap
 async function readManifest() { return JSON.parse(await readFile(MANIFEST, 'utf8')); }
 async function writeManifest(m) { const tmp = MANIFEST + '.tmp'; await writeFile(tmp, JSON.stringify(m, null, 2)); await rename(tmp, MANIFEST); }
 function recomputeBlocking(m) {
-  const b = m.slots.filter((s) => s.provenance === 'original' && !s.keep && !s.replacement).length;
+  const b = m.slots.filter((s) => s.provenance === 'original' && !s.keep && !s.replacement && s.role === 'content'
+    && !(s.flags || []).some((f) => String(f).startsWith('advanced:'))).length;
   m.meta.counts = m.meta.counts || {}; m.meta.counts.blocking = b; return b;
+}
+// Apply ONE op to ONE slot object (in-memory). Shared by /slot, /group, /batch. Returns false if op unknown.
+function applySlotOp(slot, op, body) {
+  switch (op) {
+    case 'replace-text': slot.replacement = { kind: 'text', value: String(body.value == null ? '' : body.value) }; slot.keep = false; slot.provenance = 'user'; return true;
+    case 'replace-asset': slot.replacement = { kind: 'asset', assetRef: body.assetRef,
+      srcset: body.srcset || (slot.replacement && slot.replacement.srcset),
+      srcsetHtml: body.srcsetHtml || (slot.replacement && slot.replacement.srcsetHtml),
+      poster: body.poster || (slot.replacement && slot.replacement.poster) }; slot.keep = false; slot.provenance = 'user'; return true;
+    case 'keep': slot.keep = true; return true;
+    case 'unkeep': slot.keep = false; return true;
+    case 'clear': slot.replacement = null; slot.keep = false; slot.provenance = 'original'; return true;
+    default: return false;
+  }
 }
 
 async function handleClone(req, res) {
@@ -106,7 +125,7 @@ async function handleClone(req, res) {
     });
   }
   // writes require the loopback arm
-  if (req.method === 'POST' && (url === '/__clone/slot' || url === '/__clone/upload')) {
+  if (req.method === 'POST' && (url === '/__clone/slot' || url === '/__clone/upload' || url === '/__clone/group' || url === '/__clone/batch' || url === '/__clone/theme')) {
     if (!LOOPBACK_OK) return sendJson(res, 403, { error: 'write-back not armed — set CLONE_LOOPBACK_OK=1 (loopback only)' });
     let body; try { body = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch (e) { return sendJson(res, 400, { error: 'bad json: ' + e.message }); }
 
@@ -114,16 +133,40 @@ async function handleClone(req, res) {
       const m = await readManifest();
       const slot = m.slots.find((s) => s.number === body.number);
       if (!slot) return sendJson(res, 404, { error: 'no slot #' + body.number });
-      switch (body.op) {
-        case 'replace-text': slot.replacement = { kind: 'text', value: String(body.value == null ? '' : body.value) }; slot.keep = false; slot.provenance = 'user'; break;
-        case 'replace-asset': slot.replacement = { kind: 'asset', assetRef: body.assetRef, srcsetHtml: body.srcsetHtml || (slot.replacement && slot.replacement.srcsetHtml) }; slot.keep = false; slot.provenance = 'user'; break;
-        case 'keep': slot.keep = true; break;
-        case 'unkeep': slot.keep = false; break;
-        case 'clear': slot.replacement = null; slot.keep = false; slot.provenance = 'original'; break;
-        default: return sendJson(res, 400, { error: 'unknown op: ' + body.op });
-      }
+      if (!applySlotOp(slot, body.op, body)) return sendJson(res, 400, { error: 'unknown op: ' + body.op });
       recomputeBlocking(m); await writeManifest(m);
       return sendJson(res, 200, { ok: true, slot, blockingCount: m.meta.counts.blocking });
+    }
+
+    // change-all-N: apply one op to every member of a group (by groupId)
+    if (url === '/__clone/group') {
+      const m = await readManifest();
+      const members = m.slots.filter((s) => s.groupId && s.groupId === body.groupId);
+      if (!members.length) return sendJson(res, 404, { error: 'no group ' + body.groupId });
+      let n = 0; for (const s of members) { if (applySlotOp(s, body.op, body)) n++; }
+      recomputeBlocking(m); await writeManifest(m);
+      return sendJson(res, 200, { ok: true, applied: n, numbers: members.map((s) => s.number), blockingCount: m.meta.counts.blocking });
+    }
+
+    // atomic multi-op (find-replace, theme apply) — ONE read/write = ONE logical change
+    if (url === '/__clone/batch') {
+      const m = await readManifest();
+      const ops = Array.isArray(body.ops) ? body.ops : [];
+      let n = 0;
+      for (const o of ops) {
+        const targets = o.groupId ? m.slots.filter((s) => s.groupId === o.groupId) : m.slots.filter((s) => s.number === o.number);
+        for (const s of targets) { if (applySlotOp(s, o.op, o)) n++; }
+      }
+      recomputeBlocking(m); await writeManifest(m);
+      return sendJson(res, 200, { ok: true, applied: n, blockingCount: m.meta.counts.blocking });
+    }
+
+    // theme record (palette/font tokens) — applied at runtime via CSS vars; baked at publish
+    if (url === '/__clone/theme') {
+      const m = await readManifest();
+      m.meta.theme = body.themeId ? { id: body.themeId, tokens: body.tokens || {}, fonts: body.fonts || {}, appliedAtRef: body.now || '' } : null;
+      await writeManifest(m);
+      return sendJson(res, 200, { ok: true, theme: m.meta.theme });
     }
 
     if (url === '/__clone/upload') {
