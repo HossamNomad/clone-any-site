@@ -17,3 +17,6 @@ Invoke the **`clone-any-site`** skill, "Repurpose Layer → edit-map" path:
    the **"Slots"** table (incl. hidden chrome), per-breakpoint toggle, and the **"N slots block publish"** counter.
 4. From here the user can `keep #N` / `replace #N <file|text>` (`/clone-swap`) or double-click to edit
    (`/clone-modifier`). The map is read-only-safe; nothing ships without `/clone-publish`.
+
+> **Clone Atlas (folder-drop) alternative:** `npm run clone:map` (from `skills/clone-any-site/scripts`)
+> emits a numbered visual map + manual for dropping files into the clone's `swaps/` folder — see `/clone-watch`.

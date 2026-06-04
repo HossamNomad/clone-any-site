@@ -394,6 +394,14 @@ function pageExtract(mirrorOrigin) {
         // DIRECT text nodes ("Hi"). Mark directOnly so an edit replaces those nodes — never textContent,
         // which would delete the nested <span> (captured as its own slot). Simple text stays unflagged.
         const directOnly = el.children && el.children.length > 0;
+        // capture an editable link target so the shipped page doesn't keep pointing at the ORIGINAL site
+        // (a clone ships with the source's hrefs → sends your visitors to the competitor). Real sites wrap
+        // the visible label as <a><span>Label</span></a>, so a text slot inherits its NEAREST ancestor
+        // anchor's href; editing retargets that anchor. Own href wins for a direct <a>; <button> uses formaction.
+        const anc = (tag === 'A') ? el : (el.closest ? el.closest('a[href]') : null);
+        const href = (tag === 'A') ? el.getAttribute('href')
+          : (tag === 'BUTTON') ? (el.getAttribute('formaction') || null)
+          : (anc ? anc.getAttribute('href') : null);
         pushAtom({
           kind: 'text', tag, subtype: directOnly ? 'text-leaf' : '',
           directOnly,
@@ -402,6 +410,7 @@ function pageExtract(mirrorOrigin) {
           cssPath: cssPath(el), nth: nthAmong(el, cssPath(el)),
           bbox: isDisplayNone(el) ? null : bbox(el),
           currentValue: dt,
+          href: href || null,
           contentSig: 'text|' + dt,
           flags: [],
           computed: { fontFamily: cs2.fontFamily, color: cs2.color, fontSize: cs2.fontSize },
@@ -410,6 +419,24 @@ function pageExtract(mirrorOrigin) {
       }
     }
   }
+
+  // ---- SEO head capture: a clone ships with the ORIGINAL site's title/description/OG/canonical — wrong
+  // brand, wrong domain, an SEO + IP liability. Capture them so the editor can rewrite + the build emits YOURS.
+  function metaContent(sel) { const m = document.querySelector(sel); return m ? (m.getAttribute('content') || '') : ''; }
+  const seo = {
+    title: document.title || '',
+    description: metaContent('meta[name="description" i]'),
+    canonical: (function () { const l = document.querySelector('link[rel="canonical" i]'); return l ? (l.getAttribute('href') || '') : ''; })(),
+    ogTitle: metaContent('meta[property="og:title" i]'),
+    ogDescription: metaContent('meta[property="og:description" i]'),
+    ogImage: metaContent('meta[property="og:image" i]'),
+    ogUrl: metaContent('meta[property="og:url" i]'),
+    // twitter cards appear as BOTH name="twitter:*" and property="twitter:*" in the wild — accept either
+    twitterTitle: metaContent('meta[name="twitter:title" i]') || metaContent('meta[property="twitter:title" i]'),
+    twitterDescription: metaContent('meta[name="twitter:description" i]') || metaContent('meta[property="twitter:description" i]'),
+    twitterImage: metaContent('meta[name="twitter:image" i]') || metaContent('meta[property="twitter:image" i]'),
+    lang: document.documentElement.getAttribute('lang') || '',
+  };
 
   // ---- meta-level signal scan -----------------------------------------------------------------------
   const metaFlags = [];
@@ -450,7 +477,7 @@ function pageExtract(mirrorOrigin) {
     }
   }
 
-  return { atoms, metaFlags, verifyMetas, forms, embeds, dataDriven, title: document.title };
+  return { atoms, metaFlags, verifyMetas, forms, embeds, dataDriven, title: document.title, seo };
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -618,10 +645,15 @@ async function main() {
   // ---- assign numbers + build slots ----
   const slots = [];
   let number = 0;
+  const usedStableIds = new Map();
   for (const a of canonical) {
     number += 1;
     const sa = a.sectionAnchor;
-    const stableId = a.kind + '-' + shortSha(sa + '|' + a.kind + '|' + normText(a.currentValue));
+    let stableId = a.kind + '-' + shortSha(sa + '|' + a.kind + '|' + normText(a.currentValue));
+    // Disambiguate identical-content siblings (e.g. per-letter logo spans, repeated inline-svg) so stableId
+    // stays UNIQUE (validate-manifest requires it). canonical order is deterministic → the occurrence suffix
+    // is stable across runs. clId (below) is already document-wide unique and is the editor's real locator.
+    { const seen = (usedStableIds.get(stableId) || 0) + 1; usedStableIds.set(stableId, seen); if (seen > 1) stableId += '-' + seen; }
     // clId — document-wide stable anchor (12 hex). Primary locator for runtime + build; stamped as
     // data-cl-id so edits survive DOM-order churn / React re-render. Content+path+order derived (deterministic).
     const clId = shortSha('cl|' + sa + '|' + a.kind + '|' + a.contentSig + '|' + a.cssPath + '|' + (a.nth || 0) + '|' + a.docOrder, 12);
@@ -666,6 +698,7 @@ async function main() {
       clId,
       type,
       subtype,
+      alt: (a.kind === 'img' && a.alt != null) ? String(a.alt) : undefined,   // editable alt text (a11y + SEO)
       role: a.role,
       mirrorLocator: {
         clId,
@@ -679,6 +712,7 @@ async function main() {
       authorization: null,
       currentValue: a.currentValue != null ? String(a.currentValue) : null,
       currentValueRef: null,
+      href: a.href || null,                 // editable link target (anchor/button) — null for non-links
       replacement: null,
       keep: false,
       repeat: null,
@@ -868,6 +902,9 @@ async function main() {
   const blocking = slots.filter(isBlockingSlot).length;
   const counts = { total: slots.length, content, chrome, grouped, blocking };
 
+  // ---- SEO: original head captured from the spine viewport; `replacement` holds the user's overrides ----
+  const seoOriginal = (spine && spine.seo) || {};
+
   // ---- assemble manifest -----------------------------------------------------------------------------
   const manifest = {
     meta: {
@@ -881,6 +918,7 @@ async function main() {
       crawlLogHash,
       viewports,
       structureAuthorization: 'unset',
+      seo: { original: seoOriginal, replacement: {} },   // editor writes overrides into replacement; build emits merged
       counts,
     },
     slots,

@@ -14,7 +14,11 @@
     "gate": "node publish-gate.mjs",
     "distill": "node distill-techniques.mjs",
     "deps": "node clone-deps-check.mjs",
-    "test": "node --test test/"
+    "clone:map": "node clone-map.mjs",
+    "clone:swap": "node clone-swap.mjs",
+    "clone:watch": "node clone-watch.mjs",
+    "clone:verify": "node clone-verify.mjs",
+    "test": "node --test"
   },
   "devDependencies": {
     "playwright": "^1.48.0",
@@ -25,5 +29,8 @@
   "optionalDependencies": {
     "sharp": "^0.33.0"
   },
-  "comment": "crawl.mjs + serve.mjs need only Node 18+ (built-in fetch). run-fidelity.mjs + extract-manifest.mjs + publish-gate.mjs need the devDependencies above + `npx playwright install chromium`. fit-slot.mjs uses optional sharp (images) + the ffmpeg binary on PATH (video); run `node clone-deps-check.mjs` to verify — both degrade gracefully if absent."
+  "engines": {
+    "node": ">=18"
+  },
+  "comment": "Minimum Node 18 (built-in fetch); Node 20 LTS recommended (see .nvmrc). crawl.mjs + serve.mjs need only Node built-ins. run-fidelity.mjs + extract-manifest.mjs + publish-gate.mjs need the devDependencies above + `npx playwright install chromium`. fit-slot.mjs uses optional sharp (images) + the ffmpeg binary on PATH (video); run `node clone-deps-check.mjs` to verify — both degrade gracefully if absent."
 }

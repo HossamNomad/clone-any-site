@@ -14,3 +14,7 @@ Invoke the **`clone-any-site`** skill, "Repurpose Layer → swap engine" path:
 3. **Always dry-run first:** `node .claude/skills/clone-any-site/scripts/validate-manifest.mjs --manifest <manifest>` — fix any errors before writing.
 4. Apply to both targets: `node .claude/skills/clone-any-site/scripts/apply-swaps.mjs --manifest <manifest> --mirror clones/<name>/mirror/<host> --target both` (idempotent; never mutates the gitignored mirror payload).
 5. Report the updated **"N slots block publish"** count. Preview with `/clone-preview`; ship only via `/clone-publish`.
+
+> **Clone Atlas (folder-drop) alternative:** instead of passing `#N <file>` here, drop numbered files into
+> `clones/<name>/swaps/` and run `npm run clone:swap` (auto-compress + slot-only swap, animations untouched);
+> `npm run clone:watch` does it on every drop, `npm run clone:verify` proves it held.

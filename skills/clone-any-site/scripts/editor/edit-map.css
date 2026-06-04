@@ -7,16 +7,12 @@
   position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
   font: 13px/1.4 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
   color: #f4f4f5;
+  /* defaults for the CSS vars the v1.2 panel/theme styles reference (themes.js may override) */
+  --cl-line: rgba(255,255,255,.12); --cl-fg: #e6e7ea; --cl-accent: #c8a24b; --cl-good: #86efac;
 }
 #cl-overlay button { font: inherit; cursor: pointer; }
 
-/* hard, unremovable watermark */
-#cl-watermark {
-  position: fixed; right: 10px; bottom: 10px; z-index: 2147483600; pointer-events: none;
-  background: repeating-linear-gradient(45deg, rgba(220,38,38,.92) 0 12px, rgba(150,20,20,.92) 12px 24px);
-  color: #fff; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
-  padding: 6px 12px; border-radius: 6px; font-size: 11px; box-shadow: 0 2px 10px rgba(0,0,0,.4);
-}
+/* (no shippability watermark — publishing is always the user's own decision) */
 
 /* toolbar */
 #cl-toolbar {
@@ -55,11 +51,10 @@
 .cl-badge .cl-type { font-weight: 500; opacity: .7; font-size: 9px; text-transform: uppercase; }
 .cl-badge:hover { outline: 2px solid #fff; outline-offset: 1px; }
 .cl-badge.cl-sel { outline: 2px solid #38bdf8; outline-offset: 1px; }
-/* live/manual mode: shrink badges to unobtrusive dots so the real site is usable */
-#cl-overlay.cl-live .cl-badge { width: 12px; min-width: 12px; height: 12px; padding: 0; opacity: .55; }
+/* Browse (live) mode = TRUE pass-through: badges shrink to faint dots AND stop intercepting pointer events,
+   so clicking a link/button/CTA under a badge browses the mirror instead of selecting a slot. */
+#cl-overlay.cl-live .cl-badge { width: 12px; min-width: 12px; height: 12px; padding: 0; opacity: .45; pointer-events: none; }
 #cl-overlay.cl-live .cl-badge .cl-num, #cl-overlay.cl-live .cl-badge .cl-type { display: none; }
-#cl-overlay.cl-live .cl-badge:hover { width: auto; min-width: 20px; height: 20px; padding: 0 5px; opacity: 1; }
-#cl-overlay.cl-live .cl-badge:hover .cl-num { display: inline; }
 
 /* element highlight ring (one shared element, moved around) */
 #cl-ring {
@@ -119,11 +114,42 @@
 .cl-fr input { flex:1; min-width:88px; box-sizing:border-box; background:#0d1117; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 8px; font-size:12.5px; }
 .cl-fr button { background:#21262d; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:12.5px; }
 .cl-fr #cl-fr-n { font-size:11.5px; color:var(--cl-good); }
+/* Sections — hide/show list */
+#cl-sections { display:flex; flex-direction:column; gap:4px; padding-top:8px; margin-top:6px; border-top:1px solid var(--cl-line); }
+#cl-sections .cl-sec-h { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; }
+.cl-sec-row { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--cl-fg); cursor:pointer; padding:3px 4px; border-radius:6px; }
+.cl-sec-row:hover { background:rgba(255,255,255,.05); }
+.cl-sec-row .cl-sec-lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.cl-sec-drag { cursor:grab; color:#8b949e; font-size:13px; line-height:1; user-select:none; }
+.cl-sec-drag:active { cursor:grabbing; }
+.cl-sec-row.cl-sec-dragging { opacity:.5; background:rgba(200,162,75,.15); }
+
+/* SEO head editor */
+#cl-seo { display:flex; flex-direction:column; gap:6px; padding-top:8px; margin-top:6px; border-top:1px solid var(--cl-line); }
+#cl-seo .cl-seo-h { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; }
+#cl-seo input, #cl-seo textarea { width:100%; box-sizing:border-box; background:#0d1117; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 8px; font:inherit; font-size:12.5px; resize:vertical; }
+#cl-seo #cl-seo-save { width:auto; align-self:flex-start; background:#21262d; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:6px; padding:6px 12px; cursor:pointer; font-size:12.5px; }
+#cl-seo #cl-seo-n { font-size:11px; color:var(--cl-good); }
+
 .cl-themes { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .cl-th-label { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; }
 .cl-th { display:flex; align-items:center; gap:6px; background:#161b22; border:1px solid var(--cl-line); color:var(--cl-fg); border-radius:7px; padding:5px 9px; font-size:12px; cursor:pointer; }
 .cl-th::before { content:""; width:11px; height:11px; border-radius:50%; background:var(--sw,#888); display:inline-block; }
 .cl-th-clear::before { display:none; }
+
+/* AI rewrite popover */
+.cl-ai-status { font-size: 12px; color: #8b949e; margin: 4px 0 8px; }
+.cl-ai-variants { display: flex; flex-direction: column; gap: 6px; }
+.cl-ai-v { text-align: left; background: #0d1117; border: 1px solid var(--cl-line); color: var(--cl-fg); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; line-height: 1.35; }
+.cl-ai-v:hover { border-color: var(--cl-accent); background: #161b22; }
+
+/* media popover — asset library (reuse uploaded images) */
+.cl-lib { margin: 6px 0 2px; }
+.cl-lib-h { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+.cl-lib-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.cl-lib-th { padding: 0; border: 1px solid var(--cl-line); border-radius: 6px; overflow: hidden; cursor: pointer; aspect-ratio: 1/1; background: #0d1117; }
+.cl-lib-th:hover { border-color: var(--cl-accent); }
+.cl-lib-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* media popover url row */
 .cl-urlrow { display:flex; gap:6px; margin:8px 0; }
@@ -150,3 +176,78 @@
   #cl-pal { width:94vw; }
   .cl-tb { padding:8px 11px; font-size:13px; }
 }
+
+/* ===================================================================================================
+   v2 — select-first UX: clean/audit badge visibility · ring label · toast · autosave chip ·
+   contextual floating toolbar · right-click context menu · media thumbnail preview
+   =================================================================================================== */
+
+/* Hybrid chrome: Edit (clean) hides numbered badges entirely; Audit shows them all; Browse dims to dots. */
+#cl-overlay.cl-edit .cl-badge { display: none !important; }
+
+/* hover/selection label chip ("#N · type") that rides just above the ring */
+#cl-ring-label {
+  position: fixed; z-index: 2147483150; pointer-events: none; opacity: 0;
+  background: #38bdf8; color: #06283a; font-weight: 700; font-size: 11px; line-height: 1;
+  padding: 4px 7px; border-radius: 6px; white-space: nowrap; transition: opacity .1s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+}
+
+/* toast — bottom-center, never blocks clicks */
+#cl-toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px);
+  z-index: 2147483650; pointer-events: none; opacity: 0;
+  background: rgba(24,24,27,.97); color: #f4f4f5; border: 1px solid rgba(255,255,255,.14);
+  padding: 9px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; max-width: 80vw;
+  box-shadow: 0 10px 36px rgba(0,0,0,.5); transition: opacity .16s ease, transform .16s ease;
+}
+#cl-toast.cl-show { opacity: 1; transform: translate(-50%, 0); }
+#cl-toast.cl-error { border-color: rgba(248,113,113,.6); background: rgba(60,18,18,.97); color: #fecaca; }
+@media (prefers-reduced-motion: reduce) { #cl-toast { transition: opacity .16s ease; } }
+
+/* autosave chip in the top bar */
+#cl-saving { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 12px; }
+#cl-saving.cl-saving-busy { background: rgba(56,189,248,.16); color: #7dd3fc; }
+#cl-saving.cl-saving-ok { background: rgba(34,197,94,.18); color: #86efac; }
+#cl-saving.cl-saving-err { background: rgba(248,113,113,.18); color: #fca5a5; }
+
+/* contextual floating toolbar anchored to the selection */
+#cl-ctx {
+  position: fixed; z-index: 2147483300; pointer-events: auto; display: flex; align-items: center; gap: 4px;
+  background: rgba(18,18,20,.96); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.cl-ctx-b {
+  background: transparent; color: #e4e4e7; border: 0; border-radius: 7px; padding: 6px 10px;
+  font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.cl-ctx-b:hover { background: rgba(255,255,255,.12); color: #fff; }
+.cl-ctx-b.cl-ctx-primary { background: #38bdf8; color: #06283a; }
+.cl-ctx-b.cl-ctx-primary:hover { background: #7dd3fc; }
+.cl-ctx-b.cl-ctx-more { padding: 6px 8px; font-size: 16px; line-height: 1; }
+.cl-ctx-b.cl-dis { opacity: .4; cursor: not-allowed; }
+.cl-ctx-tag { font-size: 11px; font-weight: 700; color: #06283a; background: #c8a24b; border-radius: 5px; padding: 2px 6px; }
+
+/* right-click context menu */
+#cl-menu {
+  position: fixed; z-index: 2147483620; pointer-events: auto; min-width: 184px;
+  background: rgba(20,20,23,.99); border: 1px solid rgba(255,255,255,.14); border-radius: 10px;
+  padding: 5px; box-shadow: 0 16px 48px rgba(0,0,0,.6);
+}
+.cl-menu-i {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%;
+  background: transparent; color: #e4e4e7; border: 0; border-radius: 7px; padding: 8px 10px;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.cl-menu-i:hover { background: rgba(56,189,248,.16); color: #fff; }
+.cl-menu-i.cl-dis { opacity: .38; cursor: default; }
+.cl-menu-i.cl-dis:hover { background: transparent; color: #e4e4e7; }
+.cl-menu-i small { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: #a1a1aa; background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; }
+.cl-menu-i.cl-menu-coming { opacity: .6; }
+.cl-menu-sep { height: 1px; background: rgba(255,255,255,.1); margin: 4px 2px; }
+
+/* media popover — live thumbnail of the dropped file (never a frozen black box) */
+#cl-pop .cl-thumb { display: block; max-width: 100%; max-height: 130px; margin: 0 auto 8px; border-radius: 8px; object-fit: contain; background: rgba(255,255,255,.04); }
+#cl-pop .cl-up { text-align: center; color: #a1a1aa; font-size: 12px; }
+#cl-pop .cl-pop-all { color: #c8a24b; font-weight: 600; }

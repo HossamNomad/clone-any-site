@@ -23,7 +23,7 @@ clones/<name>/
 `manifest.json` / `.lock.json` / `build-fingerprint.json` are **tracked**. Everything else under `repurpose/`
 is **ignored** (mirror IP + binary clutter), like the mirror payload.
 
-## 1. CLI signatures (all `node <script> [flags]`, all ESM, node ≥ 20)
+## 1. CLI signatures (all `node <script> [flags]`, all ESM, node ≥ 18)
 
 | Script | Invocation | Exit | Stdout |
 |---|---|---|---|

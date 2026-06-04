@@ -26,6 +26,15 @@
           "enum": ["unset", "authorized", "unauthorized"],
           "description": "Set per public deploy by the publish-gate attestation. authorized => DOM-derivative target allowed; unauthorized => clean-room rebuild forced."
         },
+        "seo": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Head SEO. `original` = captured from the source (do not ship as-is); `replacement` = the user's overrides; the build emits replacement-over-original so the shipped page carries YOUR title/description/OG, not the cloned site's.",
+          "properties": {
+            "original": { "type": "object", "additionalProperties": true },
+            "replacement": { "type": "object", "additionalProperties": true }
+          }
+        },
         "counts": {
           "type": "object",
           "additionalProperties": true,
@@ -58,6 +67,9 @@
         "directOnly": { "type": "boolean", "description": "Text element that also has element children — edit its DIRECT text nodes only, never textContent (which would delete nested slots)." },
         "type": { "type": "string", "enum": ["text", "img", "bg", "svg", "video", "icon", "section"] },
         "subtype": { "type": "string", "enum": ["", "text-as-image", "text-leaf", "icon-font", "canvas-text", "picture", "srcset", "inline-svg", "css-bg", "css-gradient", "pattern-bg", "svg-text", "pseudo-content"], "default": "" },
+        "alt": { "type": "string", "description": "Editable alt text for an image slot (accessibility + SEO). Build writes it onto the swapped/kept <img>." },
+        "altReplacement": { "type": "string", "description": "User override for alt text; build prefers this over the original alt." },
+        "section": { "type": "object", "additionalProperties": true, "description": "Section-slot layout overrides (manifest-only, reversible). { hidden: bool } drops the whole section; { order: int } reorders it among its sibling sections. Never touches the section's internals/CSS.", "properties": { "hidden": { "type": "boolean" }, "order": { "type": ["integer", "null"], "description": "Sibling reorder index — sections in a shared parent are sorted by this. null/absent = keep natural order." } } },
         "srcsetSpec": { "type": "object", "additionalProperties": true, "description": "v1.1 responsive shape of an image (picture/img-srcset/plain) so a swap REBUILDS srcset instead of stripping it." },
         "posterRef": { "type": ["string", "null"], "description": "v1.1 video poster ref." },
         "sourcesSpec": { "type": "array", "items": { "type": "object", "additionalProperties": true }, "description": "v1.1 video <source> list to rebuild on swap." },

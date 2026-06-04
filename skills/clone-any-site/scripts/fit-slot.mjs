@@ -127,7 +127,11 @@ function buildSrcset(slot, viewports, spec, generated, degraded) {
 }
 
 function runBin(bin, a) {
-  const r = spawnSync(bin, a, { stdio: 'pipe', shell: process.platform === 'win32' });
+  // shell:false (default) — on Windows libuv still resolves `ffmpeg.exe` on PATH, and the args
+  // array is passed verbatim so input paths containing spaces (e.g. "…\Claude Code\…") are NOT
+  // re-split by a shell. shell:true silently truncated such paths at the space. Matches transcode.mjs.
+  const r = spawnSync(bin, a, { stdio: 'pipe' });
+  if (r.error) throw new Error(bin + ' not found / failed to spawn: ' + r.error.code + ' (' + r.error.message + ')');
   if (r.status !== 0) throw new Error(bin + ' failed: ' + (r.stderr ? r.stderr.toString().slice(-300) : r.status));
 }
 

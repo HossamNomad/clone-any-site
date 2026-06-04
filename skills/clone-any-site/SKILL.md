@@ -28,6 +28,36 @@ A portable, battle-tested recipe for cloning *any* website to ≥95% **measured*
    keeping 100% of the structure/animation/interactivity. (Auto-rebuilding a whole "brand version" changes too
    much at once → low quality. We don't do that.)
 
+## Start here — durable lessons (don't re-debug solved problems)
+
+Before building or debugging a clone, skim **`references/lessons-resolved.md`** — the already-solved
+gotchas (black-screen `<picture>` rebuild, decode-before-swap, loopback-only, flaky-harness defense),
+the fidelity/modifiability verdicts, the editor version log, and the command/script reference all live
+there. It's the "never restart from zero" memory for this skill. **§H = the Clone Atlas folder-drop layer
+(below) — read it before doing any asset swap.**
+
+## ★ Clone Atlas — folder-drop asset swap (the simple, reliable editing layer)
+
+The live in-browser editor is **retired** for editing assets (it drifts on hydrating SPAs). To change a
+picture / clip / text without ever breaking the animations, use the **numbered map + manual + folder-drop**:
+
+1. **`npm run clone:map -- --clone <site>`** → opens a numbered, color-coded **VISUAL-MAP.html** (badge on
+   every element: 🟦`IMG-n` 🟥`VID-n` 🟪`SEQ-n` 🟧`TITLE-n` ⬜`TXT-n`) + a **MANUAL.md/.html** + the pristine
+   animation baseline `ANIM-LOCK.json`. Run this **first** (before any swap). Outputs land in `<site>/repurpose/`.
+2. **Drop a file named exactly like the tag** into `clones/<site>/swaps/` — e.g. to replace clip #4, name it
+   `VID-04.mp4`; for image #7, `IMG-07.jpg`. (Text/titles aren't dropped — edit `swaps.json`.)
+3. **`npm run clone:swap -- --clone <site>`** (one-shot) or **`npm run clone:watch -- --clone <site>`** (auto on
+   every drop): compresses the drop (sharp WebP / ffmpeg H.264 +faststart +poster, **timing preserved**) into
+   `swaps/.generated/` and registers it in `swaps.json`. The live `serve-repurpose` then serves it at
+   `/__swap/<TAG>` — only that one slot changes; **structure, scripts, keyframes, timing are untouched**.
+4. **`npm run clone:verify -- --clone <site>`** → `_verify/verify-report.json` + `.PASS`/`.FAIL` sentinel:
+   asserts the animation census survived (per-axis ≥95%), the **intro still moves** (frame-diff), the swap
+   actually applied, and 0 new console errors. **Decide on the report file, never on a green checkmark.**
+
+**Gotchas (see lessons §H):** don't pass `--entry`/leading-slash args through Git-Bash (MSYS mangles them →
+rely on auto-detect); paths contain a space ("Claude Code") so any `spawn` must be `shell:false`. Proven on
+`clones/eiger-extreme/` (1 of 5 videos swapped, animations intact, intro still animating, 0 errors).
+
 ## Announce + scope first
 
 Tell the user: *"Using clone-any-site to mirror `<url>` on loopback, prove fidelity, and hand you a numbered,

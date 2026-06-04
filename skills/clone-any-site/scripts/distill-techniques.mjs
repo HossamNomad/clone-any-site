@@ -24,10 +24,26 @@
 // from --now (ISO string). Any id is content-derived (sha1 via node:crypto). Two runs on a
 // frozen input produce byte-identical output.
 
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  sha1,
+  slugify,
+  categorize,
+  parseFrontmatter,
+  fmArray,
+  buildFrontmatter,
+  newCardBody,
+  variantNote,
+  hasVariantNote,
+  buildIndex,
+  readAllCards,
+  validateCard,
+  flagSuspectCode,
+  buildDnaJson,
+} from './lib/dna-card.mjs';
+import { byKey } from './lib/dimensions.mjs';
 
 // ---------------------------------------------------------------------------
 // tiny hand-rolled flag parser (no deps)
@@ -55,39 +71,180 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-const DEFAULT_LIB = 'design-system/clone-techniques';
+const DEFAULT_LIB     = 'design-system/clone-techniques';
+const DEFAULT_LIB_DNA = 'design-system/design-dna';
 
-function sha1(s) {
-  return createHash('sha1').update(s, 'utf8').digest('hex');
+// ---------------------------------------------------------------------------
+// stripMarkdown — remove bold, links, backticks from a cell string.
+// ---------------------------------------------------------------------------
+function stripMarkdown(s) {
+  return s
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // [text](url) -> text
+    .replace(/\*\*/g, '')                      // bold
+    .replace(/[`*_]+/g, '')                    // emphasis / backtick
+    .trim();
 }
 
-// slug from a technique name: lowercased, non-alnum -> hyphen, collapsed, trimmed.
-function slugify(name) {
-  const base = String(name)
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-');
-  // a re-run of the same name is byte-identical; an empty/non-latin name falls back to a
-  // content-derived stable suffix (deterministic, no clock/randomness).
-  if (!base) return 'technique-' + sha1(name).slice(0, 8);
-  return base;
+// ---------------------------------------------------------------------------
+// parseEffectTable — parse a GFM table that has an Effect/Technique column
+// AND a Mechanism column. Returns [{ name, mechanismHint, refId }].
+// Skips fenced-code-block content and non-qualifying tables.
+// ---------------------------------------------------------------------------
+export function parseEffectTable(md) {
+  const lines = md.split(/\r?\n/);
+  let inFence = false;
+  const result = [];
+
+  // We scan for blocks that look like a GFM table: header | delimiter | body rows
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i];
+
+    // fence tracking
+    if (/^\s*(```|~~~)/.test(raw)) { inFence = !inFence; i++; continue; }
+    if (inFence) { i++; continue; }
+
+    // look for a pipe-table header row
+    if (!raw.trim().startsWith('|')) { i++; continue; }
+
+    // parse header cells
+    const headerCells = raw.split('|').map((c) => c.trim()).filter((c, idx, arr) => idx > 0 && idx < arr.length - 1);
+    if (headerCells.length < 2) { i++; continue; }
+
+    // next non-empty line must be a delimiter row (|---|)
+    let di = i + 1;
+    while (di < lines.length && lines[di].trim() === '') di++;
+    if (di >= lines.length) { i++; continue; }
+    if (!/^\|[-| :]+\|/.test(lines[di].trim())) { i++; continue; }
+
+    // identify Effect/Technique and Mechanism column indices (case-insensitive)
+    const effectIdx = headerCells.findIndex((h) => /^effect$|^technique$/i.test(h));
+    const mechIdx   = headerCells.findIndex((h) => /^mechanism/i.test(h));
+    if (effectIdx === -1 || mechIdx === -1) { i = di + 1; continue; } // not an effect table
+
+    // identify optional ID/ref column
+    const idIdx = headerCells.findIndex((h) => /^id$/i.test(h));
+
+    // parse body rows
+    let ri = di + 1;
+    while (ri < lines.length) {
+      const row = lines[ri];
+      if (!row.trim().startsWith('|')) break;
+      if (/^\s*(```|~~~)/.test(row)) { inFence = true; break; }
+
+      const cells = row.split('|').map((c) => c.trim()).filter((c, idx, arr) => idx > 0 && idx < arr.length - 1);
+      if (cells.length <= Math.max(effectIdx, mechIdx)) { ri++; continue; }
+
+      const name = stripMarkdown(cells[effectIdx] || '');
+      const mechanismHint = stripMarkdown(cells[mechIdx] || '');
+      const refIdRaw = idIdx !== -1 ? (cells[idIdx] || '') : '';
+      const refIdMatch = refIdRaw.match(/^E\d+/i);
+      const refId = refIdMatch ? refIdMatch[0].toUpperCase() : '';
+
+      if (name) result.push({ name, mechanismHint, refId });
+      ri++;
+    }
+    i = ri;
+  }
+  return result;
 }
 
-// Heuristic categorizer (deterministic; keyword match only).
-function categorize(name) {
-  const n = name.toLowerCase();
+// ---------------------------------------------------------------------------
+// inferFeasibilityFromStack — negation-aware token scanner.
+// red:    any NON-negated token in { three, r3f, react-three, webgl, wasm, draco, glb, shader, glsl }
+// yellow: any NON-negated token in { gsap, canvas, lenis, locomotive, lottie, framer-motion }
+// green:  otherwise
+//
+// "No X" / "without X" / "no X," count as negated — the token X does NOT raise the tier.
+// ---------------------------------------------------------------------------
+const RED_TOKENS    = ['three', 'r3f', 'react-three', 'webgl', 'wasm', 'draco', 'glb', 'shader', 'glsl'];
+const YELLOW_TOKENS = ['gsap', 'canvas', 'lenis', 'locomotive', 'lottie', 'framer-motion'];
+
+export function inferFeasibilityFromStack(md) {
+  // Focus on Stack snapshot section if present, else scan whole text.
+  let text = md;
+  const snapMatch = md.match(/##\s+Stack snapshot([\s\S]*?)(?=\n##\s|\s*$)/i);
+  if (snapMatch) text = snapMatch[1];
+
+  // Tokenize: build list of {token, negated}
+  // A token preceded (anywhere in the same short window) by "no " or "without " is negated.
+  const lc = text.toLowerCase();
+
+  const isNegated = (tok, pos) => {
+    // look back up to 20 chars for "no " or "without "
+    const window = lc.slice(Math.max(0, pos - 20), pos);
+    return /\bno\s+$/.test(window) || /\bwithout\s+$/.test(window);
+  };
+
+  let hasRed = false;
+  let hasYellow = false;
+
+  for (const tok of RED_TOKENS) {
+    let idx = lc.indexOf(tok);
+    while (idx !== -1) {
+      if (!isNegated(tok, idx)) { hasRed = true; break; }
+      idx = lc.indexOf(tok, idx + 1);
+    }
+    if (hasRed) break;
+  }
+
+  if (!hasRed) {
+    for (const tok of YELLOW_TOKENS) {
+      let idx = lc.indexOf(tok);
+      while (idx !== -1) {
+        if (!isNegated(tok, idx)) { hasYellow = true; break; }
+        idx = lc.indexOf(tok, idx + 1);
+      }
+      if (hasYellow) break;
+    }
+  }
+
+  return hasRed ? 'red' : hasYellow ? 'yellow' : 'green';
+}
+
+// ---------------------------------------------------------------------------
+// inferDimensions — map name + mechanismHint to sorted unique dimension ids.
+// Uses byKey() from dimensions.mjs to stay consistent with the dimension table.
+// ---------------------------------------------------------------------------
+export function inferDimensions(name, hint = '') {
+  const n = (name + ' ' + hint).toLowerCase();
   const has = (...ws) => ws.some((w) => n.includes(w));
-  if (has('scroll-scrub', 'scrub', 'pinned', 'sticky', 'parallax')) return 'scroll';
-  if (has('smooth scroll', 'lenis', 'locomotive', 'inertia', 'inertial')) return 'scroll';
-  if (has('marquee', 'ticker', 'infinite track', 'loop')) return 'motion';
-  if (has('reveal', 'intersectionobserver', 'fade-in', 'fade in', 'on scroll')) return 'reveal';
-  if (has('webgl', 'shader', 'three', 'r3f', 'canvas', 'gpu', 'glsl')) return 'webgl';
-  if (has('cursor', 'hover', 'magnetic', 'tilt')) return 'interaction';
-  if (has('typo', 'font', 'kinetic type', 'split text', 'text')) return 'typography';
-  if (has('transition', 'page transition', 'route', 'morph')) return 'transition';
-  return 'effect';
+  const ids = new Set();
+
+  const add = (key) => { const d = byKey(key); if (d) ids.add(d.id); };
+
+  // motion (1)
+  if (has('scroll', 'parallax', 'scrub', 'translate', 'sticky', 'pin', 'marquee', 'reveal', 'fade', 'loop', 'animate', 'animation', 'transform', 'transition', 'move', 'slide', 'reel')) add('motion');
+
+  // immersion (2) — 3d/depth signals
+  if (has('3d', 'depth', 'webgl', 'three', 'r3f', 'canvas', 'perspective', 'camera')) add('immersion');
+
+  // kinetic-type (3)
+  if (has('typewriter', 'type ', 'typing', 'split-text', 'splittext', 'letter', 'character', 'word', 'font', 'text reveal', 'text anim')) add('kinetic-type');
+
+  // narrative (4)
+  if (has('chapter', 'story', 'progress', 'route', 'section', 'meter', 'indicator', 'pin')) add('narrative');
+
+  // color (5)
+  if (has('gradient', 'color', 'colour', 'grade', 'blur', 'opacity', 'crossfade', 'blend', 'filter', 'hue')) add('color');
+
+  // micro-interactions (6)
+  if (has('cursor', 'magnetic', 'hover', 'click', 'button', 'focus', 'micro', 'interaction', 'drag')) add('micro-interactions');
+
+  // perf (7)
+  if (has('lazy', 'lazy-load', 'lazyload', 'preload', 'will-change', 'gpu', 'offscreen', 'decode', 'perf', 'performance')) add('perf');
+
+  // composition (8)
+  if (has('grid', 'collage', 'column', 'slider', 'gallery', 'layout', 'masonry', 'strip', 'tile', 'block')) add('composition');
+
+  // sound (9)
+  if (has('audio', 'sound', 'music', 'narration', 'mp3', 'wav', 'sfx')) add('sound');
+
+  // finish (10)
+  if (has('finish', 'polish', 'cohesion', 'detail', 'micro-detail', 'spacing', 'refined')) add('finish');
+
+  const sorted = [...ids].sort((a, b) => a - b);
+  return sorted.length > 0 ? sorted : [1]; // default motion
 }
 
 // ---------------------------------------------------------------------------
@@ -133,161 +290,15 @@ function parseCandidates(md) {
 }
 
 // ---------------------------------------------------------------------------
-// card construction / merge
-// ---------------------------------------------------------------------------
-const FM_OPEN = '---';
-
-// Parse an existing card's frontmatter (minimal YAML: scalars + one inline array).
-function parseFrontmatter(text) {
-  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-  if (!m) return { fm: {}, body: text };
-  const fmRaw = m[1];
-  const body = text.slice(m[0].length);
-  const fm = {};
-  for (const line of fmRaw.split(/\r?\n/)) {
-    const kv = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
-    if (!kv) continue;
-    const key = kv[1];
-    let val = kv[2].trim();
-    if (val.startsWith('[') && val.endsWith(']')) {
-      const inner = val.slice(1, -1).trim();
-      val = inner.length
-        ? inner.split(',').map((x) => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
-        : [];
-    } else {
-      val = val.replace(/^["']|["']$/g, '');
-    }
-    fm[key] = val;
-  }
-  return { fm, body };
-}
-
-function fmArray(s) {
-  // deterministic: stable, no duplicates, sorted for byte-identical re-runs.
-  const uniq = Array.from(new Set(s));
-  uniq.sort();
-  return '[' + uniq.join(', ') + ']';
-}
-
-function buildFrontmatter({ slug, name, category, seenOnSites, firstSeen }) {
-  return [
-    FM_OPEN,
-    `slug: ${slug}`,
-    `name: ${name}`,
-    `category: ${category}`,
-    `seenOnSites: ${fmArray(seenOnSites)}`,
-    `firstSeen: ${firstSeen}`,
-    FM_OPEN,
-  ].join('\n');
-}
-
-function newCardBody({ name, clone }) {
-  return [
-    '',
-    `# ${name}`,
-    '',
-    '## Mechanism',
-    '',
-    '<!-- TODO: describe the conceptual how-it-works. Derived from the recon heading only;',
-    '     fill in the precise mechanism once studied in the mirror. -->',
-    `*${name}* — conceptual mechanism not yet derived from the heading alone. **TODO:** explain`,
-    'the underlying technique (what drives it, what state it reads, how it composes).',
-    '',
-    '## Code sketch',
-    '',
-    '```js',
-    '// GENERIC, original-free placeholder — a recipe, not the cloned source.',
-    '// Replace with a clean-room implementation of the technique.',
-    'export function applyTechnique(target, opts = {}) {',
-    '  // TODO: implement the generalized recipe here.',
-    '  return target;',
-    '}',
-    '```',
-    '',
-    '## Where to reuse',
-    '',
-    '- **Pulsia**: landing heroes, expedition pages, dashboard moments.',
-    '- **Atlas**: white-label cinematic-lounge client sites.',
-    '- **Clients**: any premium marketing page that needs this effect.',
-    '',
-    '## Source',
-    '',
-    `- [\`clones/${clone}/_recon/effects-inventory.md\`](../../../clones/${clone}/_recon/effects-inventory.md)`,
-    '',
-  ].join('\n');
-}
-
-function variantNote(clone) {
-  return [
-    '',
-    `### Variant seen on ${clone}`,
-    '',
-    `- [\`clones/${clone}/_recon/effects-inventory.md\`](../../../clones/${clone}/_recon/effects-inventory.md)`,
-    '',
-  ].join('\n');
-}
-
-function hasVariantNote(body, clone) {
-  // exact heading match, line-anchored, to keep dedup idempotent
-  const re = new RegExp('^### Variant seen on ' + clone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'm');
-  return re.test(body);
-}
-
-// ---------------------------------------------------------------------------
-// TECHNIQUES.md index (deterministic, sorted by slug)
-// ---------------------------------------------------------------------------
-function buildIndex(cards) {
-  const sorted = [...cards].sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
-  const rows = sorted.map((c) => {
-    const n = Array.isArray(c.seenOnSites) ? c.seenOnSites.length : 0;
-    return `| ${c.name} | ${c.category} | ${n} | [${c.slug}](cards/${c.slug}.md) |`;
-  });
-  return [
-    '# Clone techniques — absorption ledger',
-    '',
-    'Cumulative library of reusable front-end techniques distilled from cloned sites.',
-    'Metadata + generalized recipes only — no original asset bytes or source code.',
-    'Regenerated deterministically by `distill-techniques.mjs` (sorted by slug).',
-    '',
-    '| Technique | Category | Seen on N sites | Card |',
-    '|---|---|--:|---|',
-    ...rows,
-    '',
-  ].join('\n');
-}
-
-// Read every card in <lib>/cards to rebuild the index from the source of truth on disk.
-async function readAllCards(cardsDir) {
-  const out = [];
-  let entries = [];
-  try {
-    entries = await readdir(cardsDir);
-  } catch {
-    return out;
-  }
-  const mdFiles = entries.filter((f) => f.endsWith('.md')).sort();
-  for (const f of mdFiles) {
-    const text = await readFile(join(cardsDir, f), 'utf8');
-    const { fm } = parseFrontmatter(text);
-    out.push({
-      slug: fm.slug || f.replace(/\.md$/, ''),
-      name: fm.name || f.replace(/\.md$/, ''),
-      category: fm.category || 'effect',
-      seenOnSites: Array.isArray(fm.seenOnSites) ? fm.seenOnSites : (fm.seenOnSites ? [fm.seenOnSites] : []),
-      firstSeen: fm.firstSeen || '',
-    });
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 async function run(argv) {
   const args = parseArgs(argv);
   const clone = args.clone;
   const effects = args.effects;
-  const lib = args.lib && args.lib !== true ? args.lib : DEFAULT_LIB;
+  const schema = args.schema && args.schema !== true ? args.schema : 'legacy';
+  const isDna = schema === 'dna';
+  const lib = args.lib && args.lib !== true ? args.lib : (isDna ? DEFAULT_LIB_DNA : DEFAULT_LIB);
   const draftOnly = !!args['draft-only'];
   const now = args.now && args.now !== true ? args.now : null;
 
@@ -296,6 +307,13 @@ async function run(argv) {
   if (!existsSync(effects)) throw new Error(`effects inventory not found: ${effects}`);
 
   const md = await readFile(effects, 'utf8');
+
+  // --- DNA mode ---
+  if (isDna) {
+    return runDna({ clone, md, lib, draftOnly, now });
+  }
+
+  // --- Legacy mode (unchanged) ---
   let candidates = parseCandidates(md);
 
   if (candidates.length < 3) {
@@ -418,6 +436,213 @@ async function run(argv) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// runDna — DNA mode: parse recon effect table + heading candidates, emit
+// DNA card stubs, dna.json (validated-only), and grouped TECHNIQUES.md.
+// ---------------------------------------------------------------------------
+async function runDna({ clone, md, lib, draftOnly, now }) {
+  const firstSeen = now || clone;
+  const feasibility = inferFeasibilityFromStack(md);
+
+  // Gather candidates: effect-table rows first, then heading/bullet fallback.
+  const tableRows = parseEffectTable(md);
+  const headingCands = parseCandidates(md);
+
+  // Build unified candidate list, dedup by slug (table rows take precedence).
+  const seen = new Set();
+  const candidates = [];
+
+  for (const row of tableRows) {
+    const slug = slugify(row.name);
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    candidates.push({
+      name: row.name,
+      slug,
+      mechanismHint: row.mechanismHint,
+      refId: row.refId,
+      fromTable: true,
+    });
+  }
+  for (const hc of headingCands) {
+    if (seen.has(hc.slug)) continue;
+    seen.add(hc.slug);
+    candidates.push({ name: hc.name, slug: hc.slug, mechanismHint: '', refId: '', fromTable: false });
+  }
+
+  if (candidates.length < 1) {
+    throw new Error('no candidate techniques parsed; need at least 1 (effect table row, H2/H3 heading, or bullet)');
+  }
+
+  const cardsDir = join(lib, 'cards');
+  if (!draftOnly) {
+    await mkdir(cardsDir, { recursive: true });
+  }
+
+  const touched = [];
+
+  for (const cand of candidates) {
+    const { slug, name, mechanismHint, refId } = cand;
+    const category = categorize(name);
+    const cardPath = join(cardsDir, `${slug}.md`);
+    let action;
+    let card;
+
+    // Per-card feasibility: raise if mechanism itself names a non-negated red/yellow token.
+    let cardFeasibility = feasibility;
+    if (mechanismHint) {
+      const hintTier = inferFeasibilityFromStack(mechanismHint);
+      // red > yellow > green
+      if (hintTier === 'red') cardFeasibility = 'red';
+      else if (hintTier === 'yellow' && cardFeasibility === 'green') cardFeasibility = 'yellow';
+    }
+
+    const dimensions = inferDimensions(name, mechanismHint);
+    const refExample = `${clone} — ${name}`;
+
+    if (existsSync(cardPath)) {
+      // DEDUP: read existing, bump seenOnSites, leave all DNA fields intact.
+      const text = await readFile(cardPath, 'utf8');
+      const { fm, body } = parseFrontmatter(text);
+      const seenSites = Array.isArray(fm.seenOnSites)
+        ? fm.seenOnSites.slice()
+        : (fm.seenOnSites ? [fm.seenOnSites] : []);
+      const already = seenSites.includes(clone);
+      if (!already) seenSites.push(clone);
+
+      const newFm = buildFrontmatter({
+        slug: fm.slug || slug,
+        name: fm.name || name,
+        category: fm.category || category,
+        intent: fm.intent || 'TODO',
+        whenToUse: fm.whenToUse || 'TODO',
+        artifactFit: fm.artifactFit || ['landing', 'site'],
+        feasibilityTier: fm.feasibilityTier || cardFeasibility,
+        dimensions: fm.dimensions || dimensions,
+        refExample: fm.refExample || refExample,
+        seenOnSites: seenSites,
+        firstSeen: fm.firstSeen || firstSeen,
+        status: fm.status || 'stub',
+        source: fm.source || 'clone',
+      }, { schema: 'dna' });
+
+      let newBody = body;
+      if (!hasVariantNote(newBody, clone)) {
+        newBody = newBody.replace(/\s*$/, '\n') + variantNote(clone);
+      }
+      const out = newFm + '\n' + newBody;
+      if (!draftOnly && out !== text) {
+        await writeFile(cardPath, out, 'utf8');
+      }
+      action = already ? 'noop' : 'updated';
+      card = {
+        slug: fm.slug || slug,
+        name: fm.name || name,
+        category: fm.category || category,
+        intent: fm.intent || 'TODO',
+        whenToUse: fm.whenToUse || 'TODO',
+        artifactFit: Array.isArray(fm.artifactFit) ? fm.artifactFit : ['landing', 'site'],
+        feasibilityTier: fm.feasibilityTier || cardFeasibility,
+        dimensions: fm.dimensions || dimensions,
+        refExample: fm.refExample || refExample,
+        seenOnSites: seenSites,
+        firstSeen: fm.firstSeen || firstSeen,
+        status: fm.status || 'stub',
+        source: fm.source || 'clone',
+        path: cardPath,
+        action,
+      };
+    } else {
+      // New DNA stub card.
+      const fmStr = buildFrontmatter({
+        slug,
+        name,
+        category,
+        intent: 'TODO',
+        whenToUse: 'TODO',
+        artifactFit: ['landing', 'site'],
+        feasibilityTier: cardFeasibility,
+        dimensions,
+        refExample,
+        seenOnSites: [clone],
+        firstSeen,
+        status: 'stub',
+        source: 'clone',
+      }, { schema: 'dna' });
+      const body = newCardBody({ name, clone, feasibilityTier: cardFeasibility, artifactFit: ['landing', 'site'] }, { schema: 'dna' });
+      const out = fmStr + '\n' + body;
+      if (!draftOnly) {
+        await writeFile(cardPath, out, 'utf8');
+      }
+      action = 'created';
+      card = {
+        slug, name, category,
+        intent: 'TODO',
+        whenToUse: 'TODO',
+        artifactFit: ['landing', 'site'],
+        feasibilityTier: cardFeasibility,
+        dimensions,
+        refExample,
+        seenOnSites: [clone],
+        firstSeen,
+        status: 'stub',
+        source: 'clone',
+        path: cardPath,
+        action,
+      };
+    }
+    touched.push(card);
+  }
+
+  // Rebuild index (grouped by dimension) from on-disk source of truth.
+  let indexCards;
+  if (draftOnly) {
+    indexCards = touched.map((c) => ({ ...c }));
+  } else {
+    indexCards = await readAllCards(cardsDir, { schema: 'dna' });
+  }
+  const indexMd = buildIndex(indexCards, { schema: 'dna' });
+  const indexPath = join(lib, 'TECHNIQUES.md');
+  if (!draftOnly) {
+    await writeFile(indexPath, indexMd, 'utf8');
+  }
+
+  // Write dna.json — only validated, non-flagged cards.
+  const validCards = indexCards.filter((c) => {
+    const { ok } = validateCard(c, '');
+    if (!ok) return false;
+    // also check for suspect code via a minimal body representation
+    const bodyCheck = flagSuspectCode(`## Approximation\n${c.refExample || ''}\n## Source\n`);
+    return bodyCheck === null;
+  });
+  const dnaJsonStr = buildDnaJson(validCards);
+  const dnaJsonPath = join(lib, 'dna.json');
+  if (!draftOnly) {
+    await writeFile(dnaJsonPath, dnaJsonStr, 'utf8');
+  }
+
+  return {
+    clone,
+    lib,
+    indexPath,
+    draftOnly,
+    now,
+    runId: sha1(`dna:${clone}\n${lib}\n${candidates.map((c) => c.slug).join(',')}`).slice(0, 12),
+    cards: touched.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      category: c.category,
+      feasibilityTier: c.feasibilityTier,
+      dimensions: c.dimensions,
+      seenOnSites: c.seenOnSites,
+      firstSeen: c.firstSeen,
+      status: c.status,
+      action: c.action,
+      path: c.path,
+    })),
+  };
+}
+
 // only run when invoked directly (so the test can import run())
 const invokedDirectly =
   import.meta.url === `file://${process.argv[1]}` ||
@@ -436,3 +661,4 @@ if (invokedDirectly) {
 }
 
 export { run, parseArgs, parseCandidates, slugify, categorize, buildIndex, parseFrontmatter };
+// parseEffectTable, inferFeasibilityFromStack, inferDimensions are exported as named exports above.

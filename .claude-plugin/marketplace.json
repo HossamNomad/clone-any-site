@@ -6,7 +6,7 @@
       "name": "clone-any-site",
       "source": "./",
       "description": "Clone any website to pixel-perfect fidelity on loopback, then repurpose it as your own — numbered manifest + a real visual editor (sticky, propagating edits · srcset-safe media swaps · Cmd-K palette · CMS find-replace · 1-click themes) + a /clone-list dashboard + a mechanical IP publish-gate.",
-      "version": "1.2.0"
+      "version": "1.3.0"
     }
   ]
 }

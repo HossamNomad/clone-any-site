@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "generated": "",
+  "cards": [
+    {
+      "slug": "a-micro-green",
+      "name": "A Micro Green",
+      "category": "interaction",
+      "intent": "delight users with subtle hover feedback",
+      "artifactFit": ["landing", "site"],
+      "feasibilityTier": "green",
+      "dimensions": [6, 1],
+      "seenOnSites": ["eiger", "active-theory"],
+      "refExample": "eiger",
+      "path": "cards/a-micro-green.md"
+    },
+    {
+      "slug": "b-micro-yellow",
+      "name": "B Micro Yellow",
+      "category": "interaction",
+      "intent": "add tactile feel to buttons",
+      "artifactFit": ["landing"],
+      "feasibilityTier": "yellow",
+      "dimensions": [6],
+      "seenOnSites": ["drinksom"],
+      "refExample": "drinksom",
+      "path": "cards/b-micro-yellow.md"
+    },
+    {
+      "slug": "c-deck-only",
+      "name": "C Deck Only",
+      "category": "composition",
+      "intent": "structure slides with visual hierarchy",
+      "artifactFit": ["deck"],
+      "feasibilityTier": "green",
+      "dimensions": [8],
+      "seenOnSites": ["landonorris"],
+      "refExample": "landonorris",
+      "path": "cards/c-deck-only.md"
+    },
+    {
+      "slug": "d-immersion-red",
+      "name": "D Immersion Red",
+      "category": "immersion",
+      "intent": "full-viewport WebGL environment",
+      "artifactFit": ["site"],
+      "feasibilityTier": "red",
+      "dimensions": [2],
+      "seenOnSites": ["igloo"],
+      "refExample": "igloo",
+      "path": "cards/d-immersion-red.md"
+    }
+  ]
+}

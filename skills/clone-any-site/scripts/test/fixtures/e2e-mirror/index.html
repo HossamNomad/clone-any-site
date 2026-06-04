@@ -1,7 +1,15 @@
 <!doctype html><html><head><meta charset="utf-8"><title>e2e</title>
-<style>:root{--brand-accent:#111}.brand{color:var(--brand-accent)}</style></head>
+<style>:root{--brand-accent:#111}.brand{color:var(--brand-accent)}main{position:relative}.cover{position:absolute;inset:0;z-index:50}</style></head>
 <body>
 <header><a class="brand" href="/" data-cl-id="cl-brand-1">Acme</a><h1 class="title" data-cl-id="cl-title">Old Headline</h1></header>
-<main><img class="hero" data-cl-id="cl-hero" src="/img/hero-1440.png" srcset="/img/hero-390.png 390w, /img/hero-1440.png 1440w" sizes="100vw" width="1200" height="600" alt="hero"></main>
+<main><img class="hero" data-cl-id="cl-hero" src="/img/hero-1440.png" srcset="/img/hero-390.png 390w, /img/hero-1440.png 1440w" sizes="100vw" width="1200" height="600" alt="hero"><a class="cover" href="#" aria-label="overlay"></a></main>
+<section class="pwrap">
+<picture>
+<source srcset="/img/pic-390.avif 390w" type="image/avif">
+<source srcset="/img/pic-1440.webp 1440w" type="image/webp">
+<img class="pic" data-cl-id="cl-pic" src="/img/pic-1440.jpg" width="800" height="400" alt="pic">
+</picture>
+</section>
+<nav class="logos"><img class="logo" data-cl-id="cl-logo-1" src="/img/logo.png" width="80" height="40" alt="logo"><img class="logo" data-cl-id="cl-logo-2" src="/img/logo.png" width="80" height="40" alt="logo"></nav>
 <footer><a class="brand" href="/" data-cl-id="cl-brand-2">Acme</a></footer>
 </body></html>

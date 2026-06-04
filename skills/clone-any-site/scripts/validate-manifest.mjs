@@ -70,13 +70,29 @@ async function main() {
     // replacement sanity
     if (s.replacement) {
       const r = s.replacement;
-      if (s.type === 'text' && r.kind !== 'text') err(tag + ' replacement.kind must be "text" for a text slot');
-      if (s.type !== 'text' && r.kind === 'text') err(tag + ' replacement.kind "text" on non-text slot ' + s.type);
+      // text slots accept 'text' or 'link' (a link edit retargets the anchor; value may be kept/absent)
+      if (s.type === 'text' && !['text', 'link'].includes(r.kind)) err(tag + ' replacement.kind must be "text" or "link" for a text slot');
+      if (s.type !== 'text' && (r.kind === 'text' || r.kind === 'link')) err(tag + ' replacement.kind "' + r.kind + '" on non-text slot ' + s.type);
       if (r.kind === 'asset') {
         if (!r.assetRef) err(tag + ' replacement.assetRef missing');
         else { const p = join(dir, r.assetRef); if (!(await exists(p))) err(tag + ' orphan replacement.assetRef (file not found): ' + r.assetRef); }
       }
       if (r.kind === 'text' && r.value == null) err(tag + ' replacement.value missing');
+      if (r.kind === 'link' && r.href == null) err(tag + ' replacement.href missing for link');
+    }
+    // alt override only on image-ish slots; must be a string
+    if (s.altReplacement != null) {
+      if (typeof s.altReplacement !== 'string') err(tag + ' altReplacement must be a string');
+      if (s.type !== 'img' && s.type !== 'icon') warn(tag + ' altReplacement on non-image slot ' + s.type);
+    }
+    // section override only on section slots; hidden must be boolean, order an integer (or null)
+    if (s.section != null) {
+      if (typeof s.section !== 'object') err(tag + ' section must be an object');
+      else {
+        if (s.section.hidden != null && typeof s.section.hidden !== 'boolean') err(tag + ' section.hidden must be a boolean');
+        if (s.section.order != null && !Number.isInteger(s.section.order)) err(tag + ' section.order must be an integer');
+      }
+      if (s.type !== 'section') warn(tag + ' section override on non-section slot ' + s.type);
     }
     // keep + replacement is contradictory
     if (s.keep && s.replacement) warn(tag + ' both keep and replacement set (replacement wins)');

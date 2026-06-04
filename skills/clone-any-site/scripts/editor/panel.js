@@ -71,7 +71,93 @@
     if (CE.themes && CE.themes.list().length) renderThemes();
     CE.on('manifest', applyFilter);
 
-    console.log('[clone] CMS panel ready — search · filter · find-replace · themes');
+    // ---- SEO section: rewrite the head so the shipped page carries YOUR title/description, not the clone's ----
+    var seoBox = document.createElement('div');
+    seoBox.id = 'cl-seo';
+    head.appendChild(seoBox);
+    function seoVal(k) { var s = (CE.manifest && CE.manifest.meta && CE.manifest.meta.seo) || {}; var rep = s.replacement || {}, org = s.original || {}; return (rep[k] != null ? rep[k] : (org[k] || '')); }
+    function renderSeo() {
+      seoBox.innerHTML =
+        '<div class="cl-seo-h">SEO · head</div>' +
+        '<input id="cl-seo-title" placeholder="page title (the clone ships the original’s)" />' +
+        '<textarea id="cl-seo-desc" rows="2" placeholder="meta description"></textarea>' +
+        '<input id="cl-seo-canon" placeholder="canonical URL (your domain)" />' +
+        '<button id="cl-seo-save">save SEO</button><span id="cl-seo-n"></span>';
+      seoBox.querySelector('#cl-seo-title').value = seoVal('title');
+      seoBox.querySelector('#cl-seo-desc').value = seoVal('description');
+      seoBox.querySelector('#cl-seo-canon').value = seoVal('canonical');
+      seoBox.querySelector('#cl-seo-save').addEventListener('click', function () {
+        var seo = {
+          title: seoBox.querySelector('#cl-seo-title').value,
+          description: seoBox.querySelector('#cl-seo-desc').value,
+          canonical: seoBox.querySelector('#cl-seo-canon').value,
+        };
+        CE.api.seo({ seo: seo }).then(function () { return CE.refreshManifest(); })
+          .then(function () { var n = seoBox.querySelector('#cl-seo-n'); if (n) n.textContent = 'saved'; CE.ui.toast('SEO head updated'); CE.emit('storeChange', {}); })
+          .catch(function (e) { CE.ui.toast('SEO save failed: ' + e.message, 'error'); });
+      });
+    }
+    // ---- Sections: hide/show whole sections (drop a block you don't need) — reversible, manifest-only ----
+    var secBox = document.createElement('div');
+    secBox.id = 'cl-sections';
+    head.appendChild(secBox);
+    var dragRow = null;
+    function renderSections() {
+      if (!CE.setSectionHidden) return;
+      var secs = (CE.manifest && CE.manifest.slots || []).filter(function (s) { return s.type === 'section'; });
+      if (!secs.length) { secBox.innerHTML = ''; return; }
+      // list in current (possibly reordered) order: by section.order, then natural number
+      secs = secs.slice().sort(function (a, b) {
+        var ao = (a.section && typeof a.section.order === 'number') ? a.section.order : null;
+        var bo = (b.section && typeof b.section.order === 'number') ? b.section.order : null;
+        if (ao == null && bo == null) return a.number - b.number;
+        if (ao == null) return 1; if (bo == null) return -1;
+        return ao - bo;
+      });
+      var canReorder = !!CE.setSectionOrderBatch;
+      secBox.innerHTML = '<div class="cl-sec-h">sections — ' + (canReorder ? 'drag to reorder · ' : '') + 'hide/show</div>' + secs.map(function (s) {
+        var hidden = !!(s.section && s.section.hidden);
+        var label = (s.currentValue || s.mirrorLocator && s.mirrorLocator.cssPath || ('#' + s.number)).toString().slice(0, 28);
+        return '<div class="cl-sec-row" data-n="' + s.number + '"' + (canReorder ? ' draggable="true"' : '') + '>' +
+          (canReorder ? '<span class="cl-sec-drag" title="drag to reorder">⠿</span>' : '') +
+          '<input type="checkbox" data-n="' + s.number + '"' + (hidden ? '' : ' checked') + '>' +
+          '<span class="cl-sec-lbl">#' + s.number + ' ' + escapeHtml(label) + '</span></div>';
+      }).join('');
+      secBox.querySelectorAll('input[data-n]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var n = +cb.getAttribute('data-n');
+          var slot = CE.manifest.slots.find(function (s) { return s.number === n; });
+          if (slot) CE.setSectionHidden(slot, !cb.checked);   // unchecked = hidden
+        });
+      });
+      if (canReorder) wireSectionDrag();
+    }
+    function wireSectionDrag() {
+      secBox.querySelectorAll('.cl-sec-row[draggable]').forEach(function (row) {
+        row.addEventListener('dragstart', function (e) { dragRow = row; row.classList.add('cl-sec-dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.getAttribute('data-n')); } catch (x) {} });
+        row.addEventListener('dragend', function () { row.classList.remove('cl-sec-dragging'); var moved = dragRow; dragRow = null; if (moved) commitSectionOrder(); });
+        row.addEventListener('dragover', function (e) {
+          e.preventDefault(); if (!dragRow || dragRow === row) return;
+          var r = row.getBoundingClientRect(); var after = e.clientY > r.top + r.height / 2;
+          row.parentNode.insertBefore(dragRow, after ? row.nextSibling : row);
+        });
+      });
+    }
+    function commitSectionOrder() {
+      var nums = Array.prototype.map.call(secBox.querySelectorAll('.cl-sec-row'), function (r) { return +r.getAttribute('data-n'); });
+      if (CE.setSectionOrderBatch && nums.length) CE.setSectionOrderBatch(nums);
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    renderSections();
+    CE.on('manifest', function () { if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#cl-sections')) return; renderSections(); });
+    CE.renderSections = renderSections;
+
+    renderSeo();
+    // NOTE: do NOT auto-repaint on 'manifest' — the SEO fields are user-owned once rendered; repainting on an
+    // unrelated edit would wipe in-progress (unsaved) typing. Saved values already equal what's in the fields.
+    CE.renderSeo = renderSeo;
+
+    console.log('[clone] CMS panel ready — search · filter · find-replace · themes · SEO');
   }
   function press(root, sel, active) { root.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', b === active ? 'true' : 'false'); }); }
 

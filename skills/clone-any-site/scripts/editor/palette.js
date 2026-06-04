@@ -66,10 +66,10 @@
     register({ title: 'Mode: Map (badges)', run: function () { CE.setMode('map'); } });
     register({ title: 'Mode: Manual (interact)', run: function () { CE.setMode('live'); } });
     ['all', '390', '768', '1440'].forEach(function (bp) { register({ title: 'Breakpoint: ' + bp, run: function () { CE.setBp(bp); } }); });
-    register({ title: 'Publish readiness', hint: 'how many slots block publish', run: function () {
+    register({ title: 'Progress: what’s still original', hint: 'informational — never blocks publishing', run: function () {
       var n = CE.recomputeCounter();
-      var blockers = CE.manifest.slots.filter(function (s) { return s.provenance === 'original' && !s.keep && !s.replacement && s.role === 'content'; }).map(function (s) { return s.number; });
-      CE.ui.setStatus(n === 0 ? 'Ready to publish ✓' : (n + ' block publish: #' + blockers.slice(0, 12).join(' #')));
+      var remaining = CE.manifest.slots.filter(function (s) { return s.provenance === 'original' && !s.keep && !s.replacement && s.role === 'content'; }).map(function (s) { return s.number; });
+      CE.ui.setStatus(n === 0 ? 'All elements are yours ✓ — publish whenever you like' : (n + ' still original (optional to change): #' + remaining.slice(0, 12).join(' #')));
     } });
     function addThemeCmds() { (CE.themes ? CE.themes.list() : []).forEach(function (t) { register({ title: 'Apply theme: ' + t.label, run: function () { CE.themes.apply(t.id); } }); }); register({ title: 'Clear theme', run: function () { CE.themes && CE.themes.clear(); } }); }
     if (CE.themes && CE.themes.list().length) addThemeCmds(); else CE.on('themesReady', addThemeCmds);
